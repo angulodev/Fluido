@@ -10,349 +10,260 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; }
-  body { background: #F7F9FB; }
   button { font-family: 'Lexend', system-ui, sans-serif; cursor: pointer; }
-  textarea, input { font-family: 'Lexend', system-ui, sans-serif; }
-  .hl  { background: linear-gradient(transparent 55%, #FFE34D 55%); padding: 0 2px; }
+  textarea, input, select { font-family: 'Lexend', system-ui, sans-serif; }
+  .hl  { background: linear-gradient(transparent 55%, var(--marker) 55%); padding: 0 2px; }
   .hl-red   { background: linear-gradient(transparent 55%, #FDEDEA 0%); text-decoration: line-through; text-decoration-color: #F25C4D; padding: 0 2px; }
   .hl-green { background: linear-gradient(transparent 55%, #E7F7EF 0%); padding: 0 2px; font-weight: 600; }
   .fadein { animation: fadein .3s ease; }
   @keyframes fadein { from { opacity:0; transform:translateY(5px);} to { opacity:1; transform:none; } }
   @media (prefers-reduced-motion: reduce) { .fadein { animation: none; } }
-  button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 3px solid #2D6CDF; outline-offset: 2px; }
+  button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel" data-presets="react">
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
 // ============================================================
-// FLUIDO v4 — 5 proveedores de IA · Ajustes rediseñados
+// FLUIDO v5 — Temas · Onboarding extendido · Escenarios propios
 // ============================================================
 
-const C = {
-  paper:"#F7F9FB", card:"#FFFFFF", ink:"#13243B", inkSoft:"#5A6B82",
-  line:"#E3E9F0", blue:"#2D6CDF", blueSoft:"#EAF1FD", marker:"#FFE34D",
-  green:"#1FA86B", greenSoft:"#E7F7EF", coral:"#F25C4D", coralSoft:"#FDEDEA",
-  purple:"#7C3AED", purpleSoft:"#F3EEFF",
-};
+// ---------- Sistema de temas ----------
+const THEMES = [
+  { id:"light-blue",    label:"Azul",          dark:false, accent:"#2D6CDF", soft:"#EAF1FD", preview:"#2D6CDF" },
+  { id:"light-violet",  label:"Violeta",        dark:false, accent:"#7C3AED", soft:"#F3EEFF", preview:"#7C3AED" },
+  { id:"light-teal",    label:"Verde azul",     dark:false, accent:"#0D9488", soft:"#CCFBF1", preview:"#0D9488" },
+  { id:"light-rose",    label:"Rosa",           dark:false, accent:"#DB2777", soft:"#FDF2F8", preview:"#DB2777" },
+  { id:"dark-blue",     label:"Noche azul",     dark:true,  accent:"#60A5FA", soft:"#1E3A5F", preview:"#60A5FA" },
+  { id:"dark-violet",   label:"Noche violeta",  dark:true,  accent:"#A78BFA", soft:"#2E1A5C", preview:"#A78BFA" },
+  { id:"dark-teal",     label:"Noche verde",    dark:true,  accent:"#34D399", soft:"#022C22", preview:"#34D399" },
+  { id:"dark-rose",     label:"Noche rosa",     dark:true,  accent:"#F472B6", soft:"#4A0020", preview:"#F472B6" },
+];
+
+function buildColors(id) {
+  const t = THEMES.find(x => x.id === id) || THEMES[0];
+  const base = t.dark ? {
+    paper:"#0F172A", card:"#1E293B", ink:"#F1F5F9", inkSoft:"#94A3B8", line:"#334155",
+    green:"#34D399", greenSoft:"#022C22", coral:"#F87171", coralSoft:"#3B0A0A", marker:"#FCD34D",
+  } : {
+    paper:"#F7F9FB", card:"#FFFFFF", ink:"#13243B", inkSoft:"#5A6B82", line:"#E3E9F0",
+    green:"#1FA86B", greenSoft:"#E7F7EF", coral:"#F25C4D", coralSoft:"#FDEDEA", marker:"#FFE34D",
+  };
+  return { ...base, blue:t.accent, blueSoft:t.soft };
+}
+
+function getSavedTheme() { try { return localStorage.getItem("fluido-theme") || "light-blue"; } catch(e) { return "light-blue"; } }
+
+// C es mutable a nivel de módulo — se actualiza al cambiar tema y React re-renderiza el árbol
+let C = buildColors(getSavedTheme());
+
+// Aplicar CSS vars para elementos que las usen
+function applyCSSVars(id) {
+  const colors = buildColors(id);
+  const r = document.documentElement;
+  r.style.setProperty("--blue", colors.blue);
+  r.style.setProperty("--marker", colors.marker);
+  r.style.setProperty("--paper", colors.paper);
+  r.style.background = colors.paper;
+}
+applyCSSVars(getSavedTheme());
+
 const FUI = "'Lexend', system-ui, sans-serif";
 const FEN = "'Newsreader', Georgia, serif";
 
-// ---------- Proveedores de IA ----------
-const PROVIDERS = [
-  {
-    id: "gemini",
-    name: "Google Gemini",
-    emoji: "🔵",
-    tag: "GRATIS · Recomendado",
-    tagColor: C.green,
-    keyPrefix: null,
-    keyPlaceholder: "Pega tu clave de AI Studio…",
-    helpUrl: "https://aistudio.google.com/apikey",
-    helpSteps: [
-      "Entra a aistudio.google.com/apikey",
-      "Inicia sesión con tu cuenta de Google",
-      'Toca el botón "Create API key"',
-      "Copia la clave que aparece (AIza… o AQ… según tu cuenta)",
-    ],
-  },
-  {
-    id: "groq",
-    name: "Groq · Llama 3.3",
-    emoji: "⚡",
-    tag: "GRATIS · Ultra rápido",
-    tagColor: C.green,
-    keyPrefix: "gsk_",
-    keyPlaceholder: "gsk_…",
-    helpUrl: "https://console.groq.com/keys",
-    helpSteps: [
-      "Entra a console.groq.com y crea cuenta gratuita",
-      'Ve a "API Keys" → "Create API Key"',
-      "Copia la clave (empieza con gsk_…)",
-      "Modelo: Llama 3.3 70B (meta, muy capaz)",
-    ],
-  },
-  {
-    id: "openrouter",
-    name: "OpenRouter",
-    emoji: "🌐",
-    tag: "GRATIS · Qwen, DeepSeek, Llama…",
-    tagColor: C.green,
-    keyPrefix: "sk-or-",
-    keyPlaceholder: "sk-or-…",
-    helpUrl: "https://openrouter.ai/keys",
-    helpSteps: [
-      "Entra a openrouter.ai y crea cuenta gratis",
-      'Ve a "Keys" → "Create Key"',
-      "Copia la clave (empieza con sk-or-…)",
-      "Accede a Qwen, DeepSeek, Llama 3.3 y muchos más gratis",
-    ],
-  },
-  {
-    id: "deepseek",
-    name: "DeepSeek",
-    emoji: "🐋",
-    tag: "MUY BARATO · Modelo chino top",
-    tagColor: C.blue,
-    keyPrefix: "sk-",
-    keyPlaceholder: "sk-…",
-    helpUrl: "https://platform.deepseek.com/api_keys",
-    helpSteps: [
-      "Entra a platform.deepseek.com y crea cuenta",
-      'Ve a "API Keys" y crea una',
-      "Copia la clave (empieza con sk-…)",
-      "Uno de los modelos más capaces a precio mínimo",
-    ],
-  },
-  {
-    id: "anthropic",
-    name: "Claude · Anthropic",
-    emoji: "🤖",
-    tag: "DE PAGO · Requiere créditos",
-    tagColor: C.coral,
-    keyPrefix: "sk-ant",
-    keyPlaceholder: "sk-ant-api03-…",
-    helpUrl: "https://console.anthropic.com/",
-    helpSteps: [
-      "Entra a console.anthropic.com",
-      "Compra créditos mínimos ($5 USD)",
-      'Ve a "API Keys" y crea una',
-      "Copia la clave (empieza con sk-ant-…)",
-    ],
-  },
+// ---------- Niveles ----------
+const LEVELS = [
+  { id:"A2", label:"Básico",       desc:"Frases cortas y simples" },
+  { id:"B1", label:"Intermedio",   desc:"Conversación de trabajo" },
+  { id:"B2", label:"Avanzado",     desc:"Reuniones y entrevistas" },
+];
+const GOAL_OPTIONS    = ["Entrevistas de trabajo","Reuniones y daily standups","Emails y chat","Viajes","Conversación casual"];
+const INTEREST_OPTIONS = ["Tecnología / software","Negocios","Gaming","Deportes","Cine y series","Música","Cocina","Mascotas","Naturaleza"];
+const GENDER_OPTIONS   = ["Hombre","Mujer","No binario","Prefiero no decir"];
+const LIVING_OPTIONS   = ["Solo/a","Con pareja","Con familia","Con compañeros/as de piso"];
+
+const STARTER_DECK = [
+  { es:"¿Puedes repetir eso, por favor?",              en:"Could you say that again, please?",              note:"Tu salvavidas #1 en reuniones." },
+  { es:"Déjame verificarlo y te confirmo.",             en:"Let me check and get back to you.",              note:"'Get back to you' = te respondo después." },
+  { es:"Tiene sentido para mí.",                        en:"That makes sense to me.",                        note:"Muy usada para mostrar acuerdo." },
+  { es:"Estoy trabajando en eso ahora mismo.",          en:"I'm working on that right now.",                 note:"Presente continuo para acciones en curso." },
+  { es:"Lo tendré listo para el viernes.",              en:"I'll have it ready by Friday.",                  note:"'By Friday' = a más tardar el viernes." },
+  { es:"No estoy seguro, pero puedo averiguarlo.",      en:"I'm not sure, but I can find out.",              note:"Honesto y profesional a la vez." },
+  { es:"El error ocurre cuando el usuario envía el formulario.", en:"The error happens when the user submits the form.", note:"'Submit' = enviar un formulario." },
+  { es:"¿Cuál es la prioridad de esta tarea?",          en:"What's the priority of this task?",              note:"Pregunta clave en daily standups." },
+  { es:"Comparto mi pantalla.",                         en:"Let me share my screen.",                        note:"'Let me...' suaviza la acción." },
+  { es:"¿Te parece bien si lo revisamos mañana?",       en:"Does it work for you if we review it tomorrow?", note:"'Does it work for you' = ¿te acomoda?" },
+  { es:"Tengo una pregunta sobre el requerimiento.",    en:"I have a question about the requirement.",       note:"Simple y directa. Úsala sin miedo." },
+  { es:"Gracias por tu tiempo, hablamos pronto.",       en:"Thanks for your time, talk soon.",               note:"Cierre natural de una llamada." },
 ];
 
-// ---------- Config de IA ----------
+// ---------- Utilidades ----------
+const pad = n => String(n).padStart(2,"0");
+const todayStr     = () => { const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
+const yesterdayStr = () => { const d=new Date(Date.now()-86400000); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
+
+// ---------- Proveedores de IA ----------
+const PROVIDERS = [
+  { id:"gemini",     name:"Google Gemini",    emoji:"🔵", tag:"GRATIS · Recomendado",        tagColor:"#1FA86B", keyPrefix:null,      keyPlaceholder:"Pega tu clave de AI Studio…", helpUrl:"https://aistudio.google.com/apikey", helpSteps:["Entra a aistudio.google.com/apikey","Inicia sesión con tu cuenta de Google","Toca el botón \"Create API key\"","Copia la clave que aparece y pégala aquí"] },
+  { id:"groq",       name:"Groq · Llama 3.3", emoji:"⚡", tag:"GRATIS · Ultra rápido",       tagColor:"#1FA86B", keyPrefix:"gsk_",    keyPlaceholder:"gsk_…",                       helpUrl:"https://console.groq.com/keys",     helpSteps:["Entra a console.groq.com y crea cuenta gratis","Ve a \"API Keys\" → \"Create API Key\"","Copia la clave (gsk_…)"] },
+  { id:"openrouter", name:"OpenRouter",        emoji:"🌐", tag:"GRATIS · Qwen, DeepSeek…",   tagColor:"#1FA86B", keyPrefix:"sk-or-",  keyPlaceholder:"sk-or-…",                     helpUrl:"https://openrouter.ai/keys",        helpSteps:["Entra a openrouter.ai y crea cuenta","Ve a \"Keys\" → \"Create Key\"","Copia la clave (sk-or-…)","Accede gratis a Qwen, DeepSeek, Llama 3.3 y más"] },
+  { id:"deepseek",   name:"DeepSeek",          emoji:"🐋", tag:"MUY BARATO · Modelo chino",  tagColor:"#2D6CDF", keyPrefix:"sk-",     keyPlaceholder:"sk-…",                        helpUrl:"https://platform.deepseek.com/api_keys", helpSteps:["Entra a platform.deepseek.com y crea cuenta","Ve a \"API Keys\" y crea una","Copia la clave (sk-…)"] },
+  { id:"anthropic",  name:"Claude · Anthropic",emoji:"🤖", tag:"DE PAGO · Requiere créditos",tagColor:"#F25C4D", keyPrefix:"sk-ant",  keyPlaceholder:"sk-ant-api03-…",             helpUrl:"https://console.anthropic.com/",    helpSteps:["Entra a console.anthropic.com","Compra créditos ($5 USD mínimo)","Ve a \"API Keys\" y crea una","Copia la clave (sk-ant-…)"] },
+];
+
+// ---------- Config IA ----------
 const AI_KEY = "fluido-ai-v2";
-
-function getAIConfig() {
-  try { return JSON.parse(localStorage.getItem(AI_KEY) || "null"); } catch (e) { return null; }
-}
+function getAIConfig() { try { return JSON.parse(localStorage.getItem(AI_KEY)||"null"); } catch(e) { return null; } }
 function setAIConfig(cfg) { localStorage.setItem(AI_KEY, JSON.stringify(cfg)); }
-
 function migrateOldConfig() {
   try {
     if (localStorage.getItem(AI_KEY)) return;
-    const old = JSON.parse(localStorage.getItem("fluido-ai") || "null");
-    if (old && old.key) {
-      const keys = {}; PROVIDERS.forEach(p => keys[p.id] = "");
-      keys[old.provider || "gemini"] = old.key;
-      setAIConfig({ active: old.provider || "gemini", keys });
-      localStorage.removeItem("fluido-ai");
-    }
-  } catch (e) {}
+    const old = JSON.parse(localStorage.getItem("fluido-ai")||"null");
+    if (old && old.key) { const keys={}; PROVIDERS.forEach(p=>keys[p.id]=""); keys[old.provider||"gemini"]=old.key; setAIConfig({active:old.provider||"gemini",keys}); localStorage.removeItem("fluido-ai"); }
+  } catch(e) {}
 }
+function isAIReady() { migrateOldConfig(); const cfg=getAIConfig(); return !!(cfg&&cfg.active&&cfg.keys&&cfg.keys[cfg.active]); }
 
-function isAIReady() {
-  migrateOldConfig();
-  const cfg = getAIConfig();
-  return !!(cfg && cfg.active && cfg.keys && cfg.keys[cfg.active]);
-}
-
-// ---------- Llamadas a la IA ----------
+// ---------- Llamadas a IA ----------
 function cleanJSON(text) {
-  let t = (text || "").replace(/```json|```/g, "").trim();
-  const o = t.indexOf("{"); const a = t.indexOf("[");
-  if (a !== -1 && (a < o || o === -1)) return t.slice(a, t.lastIndexOf("]") + 1);
-  if (o !== -1) return t.slice(o, t.lastIndexOf("}") + 1);
+  let t=(text||"").replace(/```json|```/g,"").trim();
+  const o=t.indexOf("{"); const a=t.indexOf("[");
+  if(a!==-1&&(a<o||o===-1)) return t.slice(a,t.lastIndexOf("]")+1);
+  if(o!==-1) return t.slice(o,t.lastIndexOf("}")+1);
   return t;
 }
-
-async function callGemini(key, sys, prompt) {
-  const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
-  let lastErr = null;
-  for (const model of models) {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
-      { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({
-          systemInstruction:{ parts:[{ text:sys }] },
-          contents:[{ parts:[{ text:prompt }] }],
-          generationConfig:{ responseMimeType:"application/json", temperature:0.9 },
-        }),
-      }
-    );
-    const data = await res.json();
-    if (data.error) {
-      const msg = data.error.message || "";
-      if (res.status === 404 || /not found|not supported|deprecated/i.test(msg)) { lastErr = new Error(msg); continue; }
-      const e = new Error(msg); e.code = "API";
-      if (/api key not valid|API_KEY_INVALID|invalid api key/i.test(msg) || [400,401,403].includes(res.status)) {
-        e.code = "BAD_KEY"; e.userMsg = "Clave de Gemini inválida. Asegúrate de copiarla desde el botón 'Create API key' en aistudio.google.com/apikey";
-      } else if (res.status === 429) {
-        e.code = "RATE"; e.userMsg = "Límite de Gemini alcanzado. Espera un momento e intenta de nuevo.";
-      } else { e.userMsg = "Error de Gemini: " + msg; }
+async function callGemini(key,sys,prompt) {
+  const models=["gemini-2.5-flash","gemini-2.0-flash","gemini-1.5-flash"];
+  let lastErr=null;
+  for(const model of models){
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+      {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:"application/json",temperature:0.9}})});
+    const data=await res.json();
+    if(data.error){
+      const msg=data.error.message||"";
+      if(res.status===404||/not found|not supported|deprecated/i.test(msg)){lastErr=new Error(msg);continue;}
+      const e=new Error(msg); e.code="API";
+      if(/api key not valid|API_KEY_INVALID|invalid api key/i.test(msg)||[400,401,403].includes(res.status)){e.code="BAD_KEY";e.userMsg="Clave de Gemini inválida. Asegúrate de copiarla desde el botón 'Create API key' en aistudio.google.com/apikey";}
+      else if(res.status===429){e.code="RATE";e.userMsg="Límite de Gemini alcanzado. Espera un momento e intenta de nuevo.";}
+      else{e.userMsg="Error de Gemini: "+msg;}
       throw e;
     }
-    const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("\n");
-    return JSON.parse(cleanJSON(text));
+    return JSON.parse(cleanJSON((data.candidates?.[0]?.content?.parts||[]).map(p=>p.text||"").join("\n")));
   }
-  const e = lastErr || new Error("Sin modelos Gemini"); e.code = "API"; e.userMsg = "Ningún modelo de Gemini respondió. Intenta más tarde."; throw e;
+  const e=lastErr||new Error("Sin modelos Gemini"); e.code="API"; e.userMsg="Ningún modelo de Gemini respondió. Intenta más tarde."; throw e;
 }
-
-async function callOpenAICompat(baseUrl, key, models, sys, prompt, extraHeaders = {}) {
-  const arr = Array.isArray(models) ? models : [models];
-  let lastErr = null;
-  for (const model of arr) {
-    const res = await fetch(`${baseUrl}/chat/completions`, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${key}`, ...extraHeaders },
-      body: JSON.stringify({
-        model,
-        messages:[{ role:"system", content:sys },{ role:"user", content:prompt }],
-        temperature:0.9,
-        response_format:{ type:"json_object" },
-      }),
-    });
-    const data = await res.json();
-    if (data.error) {
-      const msg = String(data.error.message || data.error.code || data.error);
-      if (/not found|deprecated|does not exist|no endpoints/i.test(msg)) { lastErr = new Error(msg); continue; }
-      const e = new Error(msg); e.code = "API";
-      if (res.status === 401 || /invalid.*key|unauthorized|api_key/i.test(msg.toLowerCase())) {
-        e.code = "BAD_KEY"; e.userMsg = `Clave inválida para ${PROVIDERS.find(p => p.id === (baseUrl.includes("groq") ? "groq" : baseUrl.includes("openrouter") ? "openrouter" : "deepseek"))?.name || baseUrl}. Revisa que la copiaste completa.`;
-      } else if (res.status === 429) {
-        e.code = "RATE"; e.userMsg = "Límite de uso alcanzado. Espera un momento.";
-      } else if (/credit|balance|quota/i.test(msg)) {
-        e.code = "NO_CREDITS"; e.userMsg = "Sin créditos en este proveedor.";
-      } else { e.userMsg = "Error: " + msg; }
+async function callOpenAICompat(baseUrl,key,models,sys,prompt,extraH={}) {
+  const arr=Array.isArray(models)?models:[models]; let lastErr=null;
+  for(const model of arr){
+    const res=await fetch(`${baseUrl}/chat/completions`,{method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`,...extraH},
+      body:JSON.stringify({model,messages:[{role:"system",content:sys},{role:"user",content:prompt}],temperature:0.9,response_format:{type:"json_object"}})});
+    const data=await res.json();
+    if(data.error){
+      const msg=String(data.error.message||data.error.code||data.error);
+      if(/not found|deprecated|does not exist|no endpoints/i.test(msg)){lastErr=new Error(msg);continue;}
+      const e=new Error(msg); e.code="API";
+      if(res.status===401||/invalid.*key|unauthorized/i.test(msg.toLowerCase())){e.code="BAD_KEY";e.userMsg=`Clave inválida. Revisa que la copiaste completa.`;}
+      else if(res.status===429){e.code="RATE";e.userMsg="Límite de uso alcanzado. Espera un momento.";}
+      else if(/credit|balance|quota/i.test(msg)){e.code="NO_CREDITS";e.userMsg="Sin créditos en este proveedor.";}
+      else{e.userMsg="Error: "+msg;}
       throw e;
     }
-    return JSON.parse(cleanJSON(data.choices?.[0]?.message?.content || "{}"));
+    return JSON.parse(cleanJSON(data.choices?.[0]?.message?.content||"{}"));
   }
-  const e = lastErr || new Error("Sin modelos disponibles"); e.code = "API"; e.userMsg = "Ningún modelo respondió. Intenta más tarde."; throw e;
+  const e=lastErr||new Error("Sin modelos disponibles"); e.code="API"; e.userMsg="Ningún modelo respondió. Intenta más tarde."; throw e;
 }
-
-async function callAnthropic(key, sys, prompt) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method:"POST",
-    headers:{
-      "Content-Type":"application/json", "x-api-key":key,
-      "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access":"true",
-    },
-    body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1000, system:sys, messages:[{ role:"user", content:prompt }] }),
-  });
-  const data = await res.json();
-  if (data.error) {
-    const msg = data.error.message || ""; const e = new Error(msg); e.code = "API";
-    if (/credit balance|too low/i.test(msg)) { e.code = "NO_CREDITS"; e.userMsg = "Tu cuenta de Anthropic no tiene créditos. Compra en console.anthropic.com o usa Gemini (gratis)."; }
-    else if (res.status === 401) { e.code = "BAD_KEY"; e.userMsg = "Clave de Anthropic inválida (debe empezar con sk-ant-…)."; }
-    else { e.userMsg = "Error de Anthropic: " + msg; }
+async function callAnthropic(key,sys,prompt) {
+  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",
+    headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:sys,messages:[{role:"user",content:prompt}]})});
+  const data=await res.json();
+  if(data.error){
+    const msg=data.error.message||""; const e=new Error(msg); e.code="API";
+    if(/credit balance|too low/i.test(msg)){e.code="NO_CREDITS";e.userMsg="Sin créditos en Anthropic. Usa Gemini (gratis).";}
+    else if(res.status===401){e.code="BAD_KEY";e.userMsg="Clave de Anthropic inválida (sk-ant-…).";}
+    else{e.userMsg="Error de Anthropic: "+msg;}
     throw e;
   }
-  return JSON.parse(cleanJSON((data.content || []).filter(b => b.type==="text").map(b => b.text).join("\n")));
+  return JSON.parse(cleanJSON((data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n")));
 }
-
-async function callAI(providerId, key, sys, prompt) {
-  switch (providerId) {
-    case "gemini":     return callGemini(key, sys, prompt);
-    case "groq":       return callOpenAICompat("https://api.groq.com/openai/v1", key, ["llama-3.3-70b-versatile","llama3-70b-8192","gemma2-9b-it"], sys, prompt);
-    case "openrouter": return callOpenAICompat("https://openrouter.ai/api/v1", key, ["qwen/qwen3-235b-a22b:free","qwen/qwen-2.5-72b-instruct:free","meta-llama/llama-3.3-70b-instruct:free","deepseek/deepseek-chat:free"], sys, prompt, { "HTTP-Referer":"https://angulodev.github.io/fluido","X-Title":"Fluido English Trainer" });
-    case "deepseek":   return callOpenAICompat("https://api.deepseek.com/v1", key, ["deepseek-chat"], sys, prompt);
-    case "anthropic":  return callAnthropic(key, sys, prompt);
-    default: { const e = new Error("NO_KEY"); e.code = "NO_KEY"; throw e; }
+async function callAI(pid,key,sys,prompt) {
+  switch(pid){
+    case "gemini":     return callGemini(key,sys,prompt);
+    case "groq":       return callOpenAICompat("https://api.groq.com/openai/v1",key,["llama-3.3-70b-versatile","llama3-70b-8192","gemma2-9b-it"],sys,prompt);
+    case "openrouter": return callOpenAICompat("https://openrouter.ai/api/v1",key,["qwen/qwen3-235b-a22b:free","qwen/qwen-2.5-72b-instruct:free","meta-llama/llama-3.3-70b-instruct:free","deepseek/deepseek-chat:free"],sys,prompt,{"HTTP-Referer":"https://angulodev.github.io/fluido","X-Title":"Fluido English Trainer"});
+    case "deepseek":   return callOpenAICompat("https://api.deepseek.com/v1",key,["deepseek-chat"],sys,prompt);
+    case "anthropic":  return callAnthropic(key,sys,prompt);
+    default: { const e=new Error("NO_KEY"); e.code="NO_KEY"; throw e; }
   }
 }
-
-async function askAI_JSON(userPrompt, system) {
-  migrateOldConfig();
-  const cfg = getAIConfig();
-  if (!cfg || !cfg.active || !cfg.keys?.[cfg.active]) { const e = new Error("NO_KEY"); e.code = "NO_KEY"; throw e; }
-  const sys = (system || "") + "\nIMPORTANTE: Responde ÚNICAMENTE con JSON válido. Sin texto antes ni después, sin backticks de Markdown.";
-  return callAI(cfg.active, cfg.keys[cfg.active], sys, userPrompt);
+async function askAI_JSON(userPrompt,system) {
+  migrateOldConfig(); const cfg=getAIConfig();
+  if(!cfg||!cfg.active||!cfg.keys?.[cfg.active]){const e=new Error("NO_KEY");e.code="NO_KEY";throw e;}
+  const sys=(system||"")+"\nIMPORTANTE: Responde ÚNICAMENTE con JSON válido. Sin texto antes ni después, sin backticks de Markdown.";
+  return callAI(cfg.active,cfg.keys[cfg.active],sys,userPrompt);
+}
+async function pingProvider(pid,key) {
+  const sys="Responde ÚNICAMENTE con JSON válido.\nIMPORTANTE: Responde ÚNICAMENTE con JSON válido. Sin texto antes ni después, sin backticks de Markdown.";
+  return callAI(pid,key,sys,'Devuelve exactamente este JSON: {"ok": true}');
 }
 
-async function pingProvider(pid, key) {
-  const sys = "Responde ÚNICAMENTE con JSON válido. Sin texto ni backticks.\nIMPORTANTE: Responde ÚNICAMENTE con JSON válido. Sin texto antes ni después, sin backticks de Markdown.";
-  return callAI(pid, key, sys, 'Devuelve exactamente este JSON: {"ok": true}');
-}
+// ---------- Banco local ----------
+function loadBank(){try{return JSON.parse(localStorage.getItem("fluido-bank")||"null")||{phrases:[],listening:[]};}catch(e){return{phrases:[],listening:[]};}}
+function saveBank(bank){try{localStorage.setItem("fluido-bank",JSON.stringify({phrases:bank.phrases.slice(-300),listening:bank.listening.slice(-150)}));}catch(e){}}
 
-// ---------- Banco local de contenido ----------
-function loadBank() {
-  try { return JSON.parse(localStorage.getItem("fluido-bank") || "null") || { phrases:[], listening:[] }; } catch (e) { return { phrases:[], listening:[] }; }
-}
-function saveBank(bank) {
-  try { localStorage.setItem("fluido-bank", JSON.stringify({ phrases:bank.phrases.slice(-300), listening:bank.listening.slice(-150) })); } catch (e) {}
-}
-
-// ---------- Estado de la app ----------
-const LEVELS = [
-  { id:"A2", label:"Básico", desc:"Frases cortas y simples" },
-  { id:"B1", label:"Intermedio", desc:"Conversación de trabajo" },
-  { id:"B2", label:"Avanzado", desc:"Reuniones y entrevistas" },
-];
-const GOAL_OPTIONS = ["Entrevistas de trabajo","Reuniones y daily standups","Emails y chat","Viajes","Conversación casual"];
-const INTEREST_OPTIONS = ["Tecnología / software","Negocios","Gaming","Deportes","Cine y series","Música","Cocina","Mascotas","Naturaleza"];
-const STARTER_DECK = [
-  { es:"¿Puedes repetir eso, por favor?", en:"Could you say that again, please?", note:"Tu salvavidas #1 en reuniones." },
-  { es:"Déjame verificarlo y te confirmo.", en:"Let me check and get back to you.", note:"'Get back to you' = te respondo después." },
-  { es:"Tiene sentido para mí.", en:"That makes sense to me.", note:"Muy usada para mostrar acuerdo." },
-  { es:"Estoy trabajando en eso ahora mismo.", en:"I'm working on that right now.", note:"Presente continuo para acciones en curso." },
-  { es:"Lo tendré listo para el viernes.", en:"I'll have it ready by Friday.", note:"'By Friday' = a más tardar el viernes." },
-  { es:"No estoy seguro, pero puedo averiguarlo.", en:"I'm not sure, but I can find out.", note:"Honesto y profesional a la vez." },
-  { es:"El error ocurre cuando el usuario envía el formulario.", en:"The error happens when the user submits the form.", note:"'Submit' = enviar un formulario." },
-  { es:"¿Cuál es la prioridad de esta tarea?", en:"What's the priority of this task?", note:"Pregunta clave en daily standups." },
-  { es:"Comparto mi pantalla.", en:"Let me share my screen.", note:"'Let me...' suaviza la acción." },
-  { es:"¿Te parece bien si lo revisamos mañana?", en:"Does it work for you if we review it tomorrow?", note:"'Does it work for you' = ¿te acomoda?" },
-  { es:"Tengo una pregunta sobre el requerimiento.", en:"I have a question about the requirement.", note:"Simple y directa. Úsala sin miedo." },
-  { es:"Gracias por tu tiempo, hablamos pronto.", en:"Thanks for your time, talk soon.", note:"Cierre natural de una llamada." },
-];
-
-const pad = n => String(n).padStart(2,"0");
-const todayStr = () => { const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
-const yesterdayStr = () => { const d=new Date(Date.now()-86400000); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
-
+// ---------- Estado de app ----------
 const DEFAULT_STATE = {
   profile:null, level:"B1", streak:0, lastActive:null,
   totals:{talk:0,phrases:0,listen:0}, daily:{date:null,talk:0,phrases:0,listen:0},
-  usedListening:[], deck:STARTER_DECK.map((p,i) => ({ id:"p"+i,...p,interval:0,due:0,seen:0 })),
+  usedListening:[], deck:STARTER_DECK.map((p,i)=>({id:"p"+i,...p,interval:0,due:0,seen:0})),
 };
-function loadState() {
-  let s = null; try { s = JSON.parse(localStorage.getItem("fluido-state")||"null"); } catch(e) {}
-  s = s ? {...DEFAULT_STATE,...s} : {...DEFAULT_STATE};
-  if (!s.daily || s.daily.date !== todayStr()) s.daily = {date:todayStr(),talk:0,phrases:0,listen:0};
-  if (!s.usedListening) s.usedListening = [];
+function loadState(){
+  let s=null; try{s=JSON.parse(localStorage.getItem("fluido-state")||"null");}catch(e){}
+  s=s?{...DEFAULT_STATE,...s}:{...DEFAULT_STATE};
+  if(!s.daily||s.daily.date!==todayStr()) s.daily={date:todayStr(),talk:0,phrases:0,listen:0};
+  if(!s.usedListening) s.usedListening=[];
   return s;
 }
-function persist(s) { try { localStorage.setItem("fluido-state", JSON.stringify(s)); } catch(e) {} }
+function persist(s){try{localStorage.setItem("fluido-state",JSON.stringify(s));}catch(e){}}
 
-// ---------- Hook de voz (TTS) ----------
-function useSpeech() {
-  const [voices, setVoices] = useState([]);
-  const supported = typeof window !== "undefined" && "speechSynthesis" in window;
-  const [failed, setFailed] = useState(!supported);
-  useEffect(() => {
-    if (!supported) return;
-    const load = () => { const v = window.speechSynthesis.getVoices().filter(v => v.lang?.toLowerCase().startsWith("en")); if (v.length) setVoices(v); };
-    load(); window.speechSynthesis.onvoiceschanged = load;
+// ---------- Hook de voz ----------
+function useSpeech(){
+  const [voices,setVoices]=useState([]);
+  const supported=typeof window!=="undefined"&&"speechSynthesis" in window;
+  const [failed,setFailed]=useState(!supported);
+  useEffect(()=>{
+    if(!supported) return;
+    const load=()=>{const v=window.speechSynthesis.getVoices().filter(v=>v.lang?.toLowerCase().startsWith("en"));if(v.length)setVoices(v);};
+    load(); window.speechSynthesis.onvoiceschanged=load;
     const t1=setTimeout(load,500); const t2=setTimeout(load,2000);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [supported]);
-  const speak = useCallback((lines, opts) => {
-    const { rate=0.9, onEnd } = opts || {};
-    if (!supported) { setFailed(true); onEnd&&onEnd(); return; }
-    const synth = window.speechSynthesis;
-    try {
+    return()=>{clearTimeout(t1);clearTimeout(t2);};
+  },[supported]);
+  const speak=useCallback((lines,opts)=>{
+    const{rate=0.9,onEnd}=opts||{};
+    if(!supported){setFailed(true);onEnd&&onEnd();return;}
+    const synth=window.speechSynthesis;
+    try{
       synth.cancel(); synth.resume();
-      const arr = Array.isArray(lines) ? lines : [{line:lines}];
-      arr.forEach((d,i) => {
-        const u = new SpeechSynthesisUtterance(d.line||d); u.lang="en-US"; u.rate=rate;
-        if (voices.length) u.voice = voices[i % Math.min(2,voices.length)];
-        if (i===arr.length-1 && onEnd) u.onend=onEnd;
+      const arr=Array.isArray(lines)?lines:[{line:lines}];
+      arr.forEach((d,i)=>{
+        const u=new SpeechSynthesisUtterance(d.line||d); u.lang="en-US"; u.rate=rate;
+        if(voices.length) u.voice=voices[i%Math.min(2,voices.length)];
+        if(i===arr.length-1&&onEnd) u.onend=onEnd;
         synth.speak(u);
       });
-      setTimeout(() => { if (!synth.speaking&&!synth.pending){setFailed(true);onEnd&&onEnd();}else setFailed(false); }, 1200);
-    } catch(e) { setFailed(true); onEnd&&onEnd(); }
-  }, [supported,voices]);
-  const stop = useCallback(() => { try{window.speechSynthesis.cancel();}catch(e){} },[]);
-  return { speak, stop, failed, supported };
+      setTimeout(()=>{if(!synth.speaking&&!synth.pending){setFailed(true);onEnd&&onEnd();}else setFailed(false);},1200);
+    }catch(e){setFailed(true);onEnd&&onEnd();}
+  },[supported,voices]);
+  const stop=useCallback(()=>{try{window.speechSynthesis.cancel();}catch(e){};},[]);
+  return{speak,stop,failed,supported};
 }
-
-function AudioWarning() {
-  return (
+function AudioWarning(){
+  return(
     <div style={{background:"#FFF8E1",border:"1px solid #E8C84A",borderRadius:12,padding:"10px 12px",fontSize:13,color:"#7A6310",marginTop:10}}>
-      🔇 <strong>Tu dispositivo no reproduce el audio.</strong> Sube el volumen y desactiva modo silencio. En Chrome/Safari desktop funciona mejor. Mientras tanto actívé el modo lectura.
+      🔇 <strong>No se reproduce el audio.</strong> Revisa el volumen y modo silencio. Chrome/Safari desktop funciona mejor.
     </div>
   );
 }
@@ -360,108 +271,98 @@ function AudioWarning() {
 // ============================================================
 // APP RAÍZ
 // ============================================================
-function App() {
-  const [state, setState] = useState(loadState);
-  const [tab, setTab] = useState("home");
-  const [aiReady, setAiReady] = useState(() => isAIReady());
+function App(){
+  const [state,setState]=useState(loadState);
+  const [tab,setTab]=useState("home");
+  const [aiReady,setAiReady]=useState(()=>isAIReady());
+  const [themeVer,setThemeVer]=useState(0); // fuerza re-render al cambiar tema
 
-  const save = useCallback((next) => { setState(next); persist(next); }, []);
-  const handleAIChanged = useCallback(() => setAiReady(isAIReady()), []);
+  const save=useCallback((next)=>{setState(next);persist(next);},[]);
+  const handleAIChanged=useCallback(()=>setAiReady(isAIReady()),[]);
+  const handleThemeChange=useCallback((id)=>{
+    localStorage.setItem("fluido-theme",id);
+    C=buildColors(id);
+    applyCSSVars(id);
+    setThemeVer(v=>v+1);
+  },[]);
 
-  const registerActivity = useCallback((block, extra) => {
-    setState(prev => {
-      const next = {...prev,...(extra||{})};
-      const today = todayStr();
-      next.daily = next.daily.date!==today ? {date:today,talk:0,phrases:0,listen:0} : {...next.daily};
-      next.daily[block] += 1;
-      next.totals = {...next.totals,[block]:next.totals[block]+1};
-      if (next.lastActive !== today) { next.streak = next.lastActive===yesterdayStr() ? next.streak+1 : 1; next.lastActive=today; }
+  const registerActivity=useCallback((block,extra)=>{
+    setState(prev=>{
+      const next={...prev,...(extra||{})};
+      const today=todayStr();
+      next.daily=next.daily.date!==today?{date:today,talk:0,phrases:0,listen:0}:{...next.daily};
+      next.daily[block]+=1;
+      next.totals={...next.totals,[block]:next.totals[block]+1};
+      if(next.lastActive!==today){next.streak=next.lastActive===yesterdayStr()?next.streak+1:1;next.lastActive=today;}
       persist(next); return next;
     });
-  }, []);
+  },[]);
 
-  if (!aiReady) return <Shell><Setup onDone={handleAIChanged} /></Shell>;
-  if (!state.profile) return <Shell><Onboarding onDone={profile => save({...state,profile,level:profile.level})} /></Shell>;
+  if(!aiReady) return <Shell><Setup onDone={handleAIChanged}/></Shell>;
+  if(!state.profile) return <Shell><Onboarding onDone={profile=>save({...state,profile,level:profile.level})}/></Shell>;
 
-  return (
+  return(
     <div style={{minHeight:"100vh",background:C.paper,fontFamily:FUI,color:C.ink,display:"flex",flexDirection:"column"}}>
       <div style={{flex:1,width:"100%",maxWidth:560,margin:"0 auto",padding:"20px 16px 96px"}}>
-        {tab==="home"     && <Home     state={state} save={save} go={setTab} />}
-        {tab==="talk"     && <Talk     state={state} registerActivity={registerActivity} />}
-        {tab==="phrases"  && <Phrases  state={state} save={save} registerActivity={registerActivity} />}
-        {tab==="listen"   && <Listen   state={state} save={save} registerActivity={registerActivity} />}
-        {tab==="settings" && <Settings state={state} save={save} onAIChanged={handleAIChanged} />}
+        {tab==="home"     && <Home     state={state} save={save} go={setTab}/>}
+        {tab==="talk"     && <Talk     state={state} registerActivity={registerActivity}/>}
+        {tab==="phrases"  && <Phrases  state={state} save={save} registerActivity={registerActivity}/>}
+        {tab==="listen"   && <Listen   state={state} save={save} registerActivity={registerActivity}/>}
+        {tab==="settings" && <Settings state={state} save={save} onAIChanged={handleAIChanged} onThemeChange={handleThemeChange}/>}
       </div>
-      <TabBar tab={tab} setTab={setTab} />
+      <TabBar tab={tab} setTab={setTab}/>
     </div>
   );
 }
-function Shell({children}) {
+function Shell({children}){
   return <div style={{minHeight:"100vh",background:C.paper,fontFamily:FUI,color:C.ink}}><div style={{width:"100%",maxWidth:560,margin:"0 auto",padding:"24px 16px 40px"}}>{children}</div></div>;
 }
 
 // ============================================================
-// SETUP — elegir proveedor y conectar
+// SETUP
 // ============================================================
-function Setup({ onDone }) {
-  const [selected, setSelected] = useState(null);
-  const [key, setKey] = useState("");
-  const [testing, setTesting] = useState(false);
-  const [error, setError] = useState(null);
-  const prov = PROVIDERS.find(p => p.id === selected);
-
-  const handleConnect = async () => {
-    if (!key.trim() || !selected) return;
-    setTesting(true); setError(null);
-    try {
-      await pingProvider(selected, key.trim());
-      const cfg = getAIConfig() || {active:null,keys:{}};
-      setAIConfig({active:selected, keys:{...(cfg.keys||{}),[selected]:key.trim()}});
+function Setup({onDone}){
+  const [selected,setSelected]=useState(null);
+  const [key,setKey]=useState("");
+  const [testing,setTesting]=useState(false);
+  const [error,setError]=useState(null);
+  const prov=PROVIDERS.find(p=>p.id===selected);
+  const handleConnect=async()=>{
+    if(!key.trim()||!selected) return;
+    setTesting(true);setError(null);
+    try{
+      await pingProvider(selected,key.trim());
+      const cfg=getAIConfig()||{active:null,keys:{}};
+      setAIConfig({active:selected,keys:{...(cfg.keys||{}),[selected]:key.trim()}});
       onDone();
-    } catch(e) {
-      setError(e.userMsg || "No pude conectar. Revisa tu clave e intenta de nuevo.");
-    }
+    }catch(e){setError(e.userMsg||"No pude conectar. Revisa tu clave e intenta de nuevo.");}
     setTesting(false);
   };
-
-  return (
+  return(
     <div className="fadein">
       <h1 style={{fontSize:34,fontWeight:700,margin:"8px 0 2px"}}>Fluido<span style={{color:C.blue}}>.</span></h1>
-      <p style={{fontFamily:FEN,fontStyle:"italic",fontSize:16,color:C.inkSoft,marginBottom:22}}>
-        Tu entrenador de inglés. <span className="hl">Elige cómo conectarlo.</span>
-      </p>
-      <p style={{fontSize:13,color:C.inkSoft,marginBottom:12}}>
-        Fluido usa IA para crear tus ejercicios. Elige un proveedor y conecta tu clave gratuita.
-        <br/><strong>Tu clave se guarda solo en este navegador, nunca se comparte.</strong>
-      </p>
-
+      <p style={{fontFamily:FEN,fontStyle:"italic",fontSize:16,color:C.inkSoft,marginBottom:22}}>Tu entrenador de inglés. <span className="hl">Elige cómo conectarlo.</span></p>
+      <p style={{fontSize:13,color:C.inkSoft,marginBottom:12,lineHeight:1.6}}>Fluido usa IA para crear tus ejercicios. Elige un proveedor y conecta tu clave. <strong>Tu clave se guarda solo en este navegador, nunca se comparte.</strong></p>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
-        {PROVIDERS.map(p => (
-          <button key={p.id} onClick={() => {setSelected(p.id);setKey("");setError(null);}}
-            style={{padding:12,borderRadius:14,border:`2px solid ${selected===p.id?C.blue:C.line}`,background:selected===p.id?C.blueSoft:C.card,textAlign:"left",transition:"all .15s"}}>
+        {PROVIDERS.map(p=>(
+          <button key={p.id} onClick={()=>{setSelected(p.id);setKey("");setError(null);}}
+            style={{padding:12,borderRadius:14,border:`2px solid ${selected===p.id?C.blue:C.line}`,background:selected===p.id?C.blueSoft:C.card,textAlign:"left"}}>
             <div style={{fontSize:24}}>{p.emoji}</div>
             <div style={{fontWeight:600,fontSize:13,marginTop:6,color:selected===p.id?C.blue:C.ink}}>{p.name}</div>
             <div style={{fontSize:10,fontWeight:700,color:p.tagColor,marginTop:2}}>{p.tag}</div>
-          </button>
-        ))}
+          </button>))}
       </div>
-
-      {prov && (
+      {prov&&(
         <div className="fadein">
           <div style={{background:C.paper,borderRadius:12,padding:12,fontSize:13,lineHeight:1.8,marginBottom:12}}>
-            {prov.helpSteps.map((s,i) => <div key={i}>{i+1}. {s}</div>)}
-            <a href={prov.helpUrl} target="_blank" rel="noreferrer" style={{color:C.blue,fontWeight:600}}>
-              → Abrir {prov.helpUrl.replace("https://","")}
-            </a>
+            {prov.helpSteps.map((s,i)=><div key={i}>{i+1}. {s}</div>)}
+            <a href={prov.helpUrl} target="_blank" rel="noreferrer" style={{color:C.blue,fontWeight:600}}>→ Abrir {prov.helpUrl.replace("https://","")}</a>
           </div>
           <input type="password" value={key} onChange={e=>{setKey(e.target.value);setError(null);}}
             placeholder={prov.keyPlaceholder}
-            style={{width:"100%",padding:"14px 16px",fontSize:15,borderRadius:12,border:`1.5px solid ${error?C.coral:C.line}`,outline:"none",marginBottom:8}}
-          />
-          {error && <p style={{color:C.coral,fontSize:13,marginBottom:8}}>❌ {error}</p>}
-          <BigButton onClick={handleConnect} disabled={!key.trim()||testing}>
-            {testing ? "Probando conexión…" : "Conectar y continuar →"}
-          </BigButton>
+            style={{width:"100%",padding:"14px 16px",fontSize:15,borderRadius:12,border:`1.5px solid ${error?C.coral:C.line}`,outline:"none",background:C.card,color:C.ink,marginBottom:8}}/>
+          {error&&<p style={{color:C.coral,fontSize:13,marginBottom:8}}>❌ {error}</p>}
+          <BigButton onClick={handleConnect} disabled={!key.trim()||testing}>{testing?"Probando conexión…":"Conectar y continuar →"}</BigButton>
         </div>
       )}
     </div>
@@ -469,38 +370,95 @@ function Setup({ onDone }) {
 }
 
 // ============================================================
-// ONBOARDING
+// ONBOARDING — con paso extra opcional
 // ============================================================
-function Onboarding({ onDone }) {
+function Onboarding({onDone}){
   const [step,setStep]=useState(0);
   const [name,setName]=useState("");
   const [role,setRole]=useState("");
   const [goals,setGoals]=useState([]);
   const [interests,setInterests]=useState([]);
   const [level,setLevel]=useState(null);
+  const [wantExtra,setWantExtra]=useState(null); // null=sin decidir, true, false
+  // Campos extra
+  const [nickname,setNickname]=useState("");
+  const [gender,setGender]=useState("");
+  const [age,setAge]=useState("");
+  const [livingWith,setLivingWith]=useState("");
+  const [hobbies,setHobbies]=useState("");
+  const [reason,setReason]=useState("");
+
   const toggle=(list,setList,item)=>setList(list.includes(item)?list.filter(x=>x!==item):[...list,item]);
-  const iStyle={width:"100%",marginTop:8,padding:"14px 16px",fontSize:16,borderRadius:14,border:`1.5px solid ${C.line}`,background:C.card,outline:"none"};
+  const iStyle={width:"100%",marginTop:8,padding:"14px 16px",fontSize:16,borderRadius:14,border:`1.5px solid ${C.line}`,background:C.card,color:C.ink,outline:"none"};
+  const taStyle={...iStyle,resize:"vertical",minHeight:80};
+
+  const buildProfile=()=>{
+    const extra=wantExtra?{nickname:nickname.trim()||null,gender:gender||null,age:age?parseInt(age):null,livingWith:livingWith||null,hobbies:hobbies.trim()||null,reason:reason.trim()||null}:null;
+    return{name:name.trim(),role:role.trim(),goals,interests,level,extra};
+  };
+
   const steps=[
-    {title:"¡Hola! 👋",sub:"Soy Fluido. Antes de empezar quiero conocerte para que cada ejercicio sea sobre TU mundo.",
+    {title:"¡Hola! 👋",sub:"Soy Fluido. Quiero conocerte para que cada ejercicio sea sobre TU mundo.",
      content:<div><label style={{fontSize:14,color:C.inkSoft}}>¿Cómo te llamas?</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="Tu nombre" style={iStyle}/></div>,valid:name.trim().length>0},
     {title:`Un gusto, ${name.trim()} ✨`,sub:"Esto me ayuda a crear situaciones realistas.",
-     content:<div><label style={{fontSize:14,color:C.inkSoft}}>¿A qué te dedicas?</label><input value={role} onChange={e=>setRole(e.target.value)} placeholder="Ej: consultor de software, estudiante…" style={iStyle}/></div>,valid:role.trim().length>1},
-    {title:"¿Para qué necesitas el inglés?",sub:"Elige todo lo que aplique.",
+     content:<div><label style={{fontSize:14,color:C.inkSoft}}>¿A qué te dedicas? (trabajo o estudio)</label><input value={role} onChange={e=>setRole(e.target.value)} placeholder="Ej: consultor de software, estudiante, diseñadora…" style={iStyle}/></div>,valid:role.trim().length>1},
+    {title:"¿Para qué necesitas el inglés?",sub:"Elige todo lo que aplique — enfocará tus ejercicios.",
      content:<ChipGrid options={GOAL_OPTIONS} selected={goals} onToggle={o=>toggle(goals,setGoals,o)}/>,valid:goals.length>0},
-    {title:"¿Qué temas te gustan?",sub:"Los usaré en los diálogos para que no sea aburrido.",
+    {title:"¿Qué temas te gustan?",sub:"Los usaré en los diálogos para que sea entretenido.",
      content:<ChipGrid options={INTEREST_OPTIONS} selected={interests} onToggle={o=>toggle(interests,setInterests,o)}/>,valid:interests.length>0},
     {title:"Tu nivel actual",sub:"Sé honesto — siempre puedes cambiarlo después.",
-     content:<div style={{display:"flex",flexDirection:"column",gap:8}}>
-       {LEVELS.map(lv=>(
-         <button key={lv.id} onClick={()=>setLevel(lv.id)}
-           style={{padding:"14px 16px",borderRadius:14,textAlign:"left",border:`2px solid ${level===lv.id?C.blue:C.line}`,background:level===lv.id?C.blueSoft:C.card}}>
-           <strong style={{color:level===lv.id?C.blue:C.ink}}>{lv.label}</strong>
-           <div style={{fontSize:13,color:C.inkSoft,marginTop:2}}>{lv.desc}</div>
-         </button>))}
-     </div>,valid:!!level},
+     content:<div style={{display:"flex",flexDirection:"column",gap:8}}>{LEVELS.map(lv=>(
+       <button key={lv.id} onClick={()=>setLevel(lv.id)}
+         style={{padding:"14px 16px",borderRadius:14,textAlign:"left",border:`2px solid ${level===lv.id?C.blue:C.line}`,background:level===lv.id?C.blueSoft:C.card}}>
+         <strong style={{color:level===lv.id?C.blue:C.ink}}>{lv.label}</strong>
+         <div style={{fontSize:13,color:C.inkSoft,marginTop:2}}>{lv.desc}</div>
+       </button>))}</div>,valid:!!level},
+    // Paso 6: ¿quieres datos extra?
+    {title:"¿Quieres escenarios ultra-personalizados? 🎯",sub:"Con un poco más de info, la IA puede crear situaciones que realmente sientan tuyas. Completamente opcional.",
+     content:(
+       wantExtra===null?(
+         <div style={{display:"flex",flexDirection:"column",gap:10,marginTop:4}}>
+           <button onClick={()=>setWantExtra(true)} style={{padding:"14px 16px",borderRadius:14,border:`2px solid ${C.blue}`,background:C.blueSoft,color:C.blue,fontWeight:600,fontSize:15}}>
+             ✨ Sí, agregar información extra
+           </button>
+           <button onClick={()=>setWantExtra(false)} style={{padding:"14px 16px",borderRadius:14,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:500,fontSize:14}}>
+             No por ahora, continuar
+           </button>
+         </div>
+       ):(
+         <div style={{display:"flex",flexDirection:"column",gap:12}} className="fadein">
+           <div>
+             <label style={{fontSize:13,color:C.inkSoft}}>¿Cómo prefieren llamarte? (apodo, pronombres…)</label>
+             <input value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="Opcional" style={iStyle}/>
+           </div>
+           <div>
+             <label style={{fontSize:13,color:C.inkSoft}}>Género</label>
+             <ChipGrid options={GENDER_OPTIONS} selected={gender?[gender]:[]} onToggle={o=>setGender(gender===o?"":o)}/>
+           </div>
+           <div>
+             <label style={{fontSize:13,color:C.inkSoft}}>Edad</label>
+             <input type="number" value={age} onChange={e=>setAge(e.target.value)} placeholder="Opcional" min="10" max="99" style={{...iStyle,width:"120px"}}/>
+           </div>
+           <div>
+             <label style={{fontSize:13,color:C.inkSoft}}>¿Con quién vives?</label>
+             <div style={{marginTop:8}}><ChipGrid options={LIVING_OPTIONS} selected={livingWith?[livingWith]:[]} onToggle={o=>setLivingWith(livingWith===o?"":o)}/></div>
+           </div>
+           <div>
+             <label style={{fontSize:13,color:C.inkSoft}}>¿Qué te gusta hacer en tu tiempo libre?</label>
+             <textarea value={hobbies} onChange={e=>setHobbies(e.target.value)} placeholder="Ej: toco guitarra, juego fútbol, cocino, hago hiking…" style={taStyle}/>
+           </div>
+           <div>
+             <label style={{fontSize:13,color:C.inkSoft}}>¿Por qué quieres aprender inglés? (tu historia)</label>
+             <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Ej: quiero conseguir trabajo remoto con clientes internacionales…" style={taStyle}/>
+           </div>
+           <button onClick={()=>setWantExtra(null)} style={{fontSize:12,color:C.inkSoft,background:"transparent",border:"none",textDecoration:"underline",textAlign:"left"}}>← Cambiar de opción</button>
+         </div>
+       )
+     ),valid:wantExtra!==null},
   ];
+
   const s=steps[step]; const last=step===steps.length-1;
-  return (
+  return(
     <div className="fadein" key={step}>
       <div style={{display:"flex",gap:4,marginBottom:24}}>
         {steps.map((_,i)=><div key={i} style={{flex:1,height:4,borderRadius:2,background:i<=step?C.blue:C.line}}/>)}
@@ -510,16 +468,18 @@ function Onboarding({ onDone }) {
       {s.content}
       <div style={{display:"flex",gap:10,marginTop:28}}>
         {step>0&&<button onClick={()=>setStep(step-1)} style={{padding:"14px 18px",borderRadius:14,border:`1.5px solid ${C.line}`,background:C.card,color:C.inkSoft,fontWeight:600}}>Atrás</button>}
-        <button onClick={()=>{if(!s.valid)return;if(last)onDone({name:name.trim(),role:role.trim(),goals,interests,level});else setStep(step+1);}} disabled={!s.valid}
-          style={{flex:1,padding:"14px 18px",borderRadius:14,border:"none",background:C.blue,color:"#fff",fontWeight:600,fontSize:16,opacity:s.valid?1:0.4}}>
-          {last?"¡Empezar a entrenar!":"Siguiente"}
-        </button>
+        {(last?wantExtra!==null:s.valid)&&(
+          <button onClick={()=>{if(!s.valid)return;if(last)onDone(buildProfile());else setStep(step+1);}} disabled={!s.valid}
+            style={{flex:1,padding:"14px 18px",borderRadius:14,border:"none",background:C.blue,color:"#fff",fontWeight:600,fontSize:16,opacity:s.valid?1:0.4}}>
+            {last?"¡Empezar a entrenar!":"Siguiente"}
+          </button>
+        )}
       </div>
     </div>
   );
 }
-function ChipGrid({options,selected,onToggle}) {
-  return (
+function ChipGrid({options,selected,onToggle}){
+  return(
     <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
       {options.map(o=>{const on=selected.includes(o);return(
         <button key={o} onClick={()=>onToggle(o)} style={{padding:"10px 14px",borderRadius:999,fontSize:14,fontWeight:500,border:`1.5px solid ${on?C.blue:C.line}`,background:on?C.blueSoft:C.card,color:on?C.blue:C.ink}}>
@@ -528,17 +488,28 @@ function ChipGrid({options,selected,onToggle}) {
     </div>
   );
 }
+
 function profileForPrompts(state,withName){
   const p=state.profile||{};
-  return `${withName&&p.name?`Nombre: ${p.name}. `:""}Ocupación: ${p.role||"profesional"}. Objetivos: ${(p.goals||[]).join(", ")}. Intereses: ${(p.interests||[]).join(", ")}. Nivel: ${state.level}.`;
+  let s=`${withName&&p.name?`Nombre: ${p.name}. `:""}Ocupación: ${p.role||"profesional"}. Objetivos: ${(p.goals||[]).join(", ")}. Intereses: ${(p.interests||[]).join(", ")}. Nivel: ${state.level}.`;
+  if(p.extra){
+    const e=p.extra;
+    if(e.nickname) s+=` Le gusta que le llamen "${e.nickname}".`;
+    if(e.gender)   s+=` Género: ${e.gender}.`;
+    if(e.age)      s+=` Edad: ${e.age} años.`;
+    if(e.livingWith) s+=` Vive con: ${e.livingWith}.`;
+    if(e.hobbies)  s+=` Le gusta: ${e.hobbies}.`;
+    if(e.reason)   s+=` Razón para aprender inglés: ${e.reason}.`;
+  }
+  return s;
 }
 
 // ============================================================
 // NAVEGACIÓN
 // ============================================================
-function TabBar({tab,setTab}) {
+function TabBar({tab,setTab}){
   const items=[{id:"home",icon:"⌂",label:"Inicio"},{id:"talk",icon:"✎",label:"Conversar"},{id:"phrases",icon:"❏",label:"Frases"},{id:"listen",icon:"♪",label:"Escuchar"},{id:"settings",icon:"⚙",label:"Ajustes"}];
-  return (
+  return(
     <nav style={{position:"fixed",bottom:0,left:0,right:0,background:C.card,borderTop:`1px solid ${C.line}`,display:"flex",justifyContent:"center",zIndex:50}}>
       <div style={{display:"flex",width:"100%",maxWidth:560}}>
         {items.map(it=>(
@@ -554,17 +525,17 @@ function TabBar({tab,setTab}) {
 // ============================================================
 // INICIO
 // ============================================================
-function Home({state,save,go}) {
+function Home({state,save,go}){
   const d=state.daily;
   const cfg=getAIConfig()||{};
   const activeProv=PROVIDERS.find(p=>p.id===cfg.active);
   const goals=[
-    {id:"talk",label:"Conversar",done:d.talk,target:3,unit:"mensajes",desc:"Escribe en inglés en una situación real"},
-    {id:"phrases",label:"Frases",done:d.phrases,target:5,unit:"tarjetas",desc:"Repasa tu mazo de frases útiles"},
-    {id:"listen",label:"Escuchar",done:d.listen,target:1,unit:"audio",desc:"Entrena el oído con diálogos reales"},
+    {id:"talk",  label:"Conversar",done:d.talk,  target:3,unit:"mensajes",desc:"Escribe en inglés en una situación real"},
+    {id:"phrases",label:"Frases", done:d.phrases,target:5,unit:"tarjetas",desc:"Repasa tu mazo de frases útiles"},
+    {id:"listen", label:"Escuchar",done:d.listen, target:1,unit:"audio",  desc:"Entrena el oído con diálogos reales"},
   ];
   const allDone=goals.every(g=>g.done>=g.target);
-  return (
+  return(
     <div className="fadein">
       <p style={{fontSize:13,color:C.inkSoft,letterSpacing:1.5,textTransform:"uppercase"}}>Hola, {state.profile.name}</p>
       <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
@@ -580,7 +551,7 @@ function Home({state,save,go}) {
         <p style={{fontSize:13,color:C.inkSoft,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Misiones de hoy</p>
         {goals.map(g=>{
           const pct=Math.min(100,Math.round((g.done/g.target)*100)); const done=g.done>=g.target;
-          return (
+          return(
             <button key={g.id} onClick={()=>go(g.id)}
               style={{width:"100%",textAlign:"left",background:C.card,border:`1px solid ${done?C.green:C.line}`,borderRadius:14,padding:14,marginBottom:10,display:"block"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -611,7 +582,7 @@ function Home({state,save,go}) {
 function StatCard({big,label,accent}){return(<div style={{flex:1,background:C.card,border:`1px solid ${C.line}`,borderRadius:14,padding:"14px 16px"}}><div style={{fontSize:30,fontWeight:700,color:accent,lineHeight:1}}>{big}</div><div style={{fontSize:13,color:C.inkSoft,marginTop:4}}>{label}</div></div>);}
 
 // ============================================================
-// CONVERSAR
+// CONVERSAR — con escenarios propios
 // ============================================================
 function Talk({state,registerActivity}){
   const [scenario,setScenario]=useState(null);
@@ -619,35 +590,37 @@ function Talk({state,registerActivity}){
   const [input,setInput]=useState("");
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState(null);
+  const [showCustom,setShowCustom]=useState(false);
+  const [customSuggestion,setCustomSuggestion]=useState("");
   const bottomRef=useRef(null);
   const {speak,failed}=useSpeech();
   useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:"smooth"});},[messages,loading]);
 
-  const newScenario=async()=>{
-    setLoading(true);setError(null);setMessages([]);setScenario(null);
+  const newScenario=async(suggestion)=>{
+    setLoading(true);setError(null);setMessages([]);setScenario(null);setShowCustom(false);
     try{
-      const data=await askAI_JSON(`Perfil: ${profileForPrompts(state,true)}\n\nGenera una situación de práctica de inglés PERSONALIZADA para este perfil: usa su ocupación, sus objetivos y a veces sus intereses. Varía el contexto cada vez (semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve JSON: {"title_es":"título corto en español","context_es":"contexto 1-2 frases, quién es el estudiante y el interlocutor","opening_en":"primer mensaje del interlocutor en inglés"}`,
-        "Eres un profesor de inglés que crea simulaciones realistas y motivantes.");
+      const basePrompt=suggestion
+        ? `El estudiante quiere practicar este escenario específico: "${suggestion}"\n\nAdáptalo según su perfil: ${profileForPrompts(state,true)}\n\nDevuelve JSON: {"title_es":"título corto","context_es":"contexto 1-2 frases, quién es el estudiante y el interlocutor","opening_en":"primer mensaje del interlocutor en inglés adecuado al nivel"}`
+        : `Perfil: ${profileForPrompts(state,true)}\n\nGenera una situación de práctica PERSONALIZADA: usa su ocupación, objetivos y a veces sus intereses. Varía el contexto (semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve JSON: {"title_es":"título corto","context_es":"contexto 1-2 frases","opening_en":"primer mensaje del interlocutor en inglés"}`;
+      const data=await askAI_JSON(basePrompt,"Eres un profesor de inglés que crea simulaciones realistas y motivantes.");
       setScenario(data);setMessages([{role:"them",text:data.opening_en}]);
-    }catch(e){setError(e.userMsg||(e.code==="NO_KEY"?"Configura tu clave en Ajustes.":"Error generando situación. Intenta de nuevo."));}
+    }catch(e){setError(e.userMsg||(e.code==="NO_KEY"?"Configura tu clave en Ajustes.":"Error generando situación."));}
     setLoading(false);
   };
 
   const send=async()=>{
-    const text=input.trim(); if(!text||loading)return;
+    const text=input.trim(); if(!text||loading) return;
     setInput("");setLoading(true);setError(null);
     const myMsg={role:"me",text};
     setMessages(m=>[...m,myMsg]);
     try{
       const history=[...messages,myMsg].map(m=>(m.role==="them"?"INTERLOCUTOR: ":"ESTUDIANTE: ")+m.text).join("\n");
-      const data=await askAI_JSON(`Perfil: ${profileForPrompts(state,true)}\nSituación: ${scenario.context_es}\n\nConversación:\n${history}\n\nCorrige errores, da versión natural y continúa como interlocutor.\n\nDevuelve JSON: {"errors":[{"wrong":"error","right":"corrección","why_es":"explicación"}],"natural_en":"versión nativa o null","tip_es":"consejo breve o null","reply_en":"respuesta del interlocutor"}`,
+      const data=await askAI_JSON(
+        `Perfil: ${profileForPrompts(state,true)}\nSituación: ${scenario.context_es}\n\nConversación:\n${history}\n\nCorrige errores, da versión natural y continúa como interlocutor.\n\nDevuelve JSON: {"errors":[{"wrong":"error","right":"corrección","why_es":"explicación"}],"natural_en":"versión nativa o null","tip_es":"consejo breve o null","reply_en":"respuesta del interlocutor que invite a seguir"}`,
         "Eres un coach de inglés cálido y preciso. Corriges sin desanimar.");
       setMessages(m=>{const c=[...m];c[c.length-1]={...myMsg,feedback:data};return[...c,{role:"them",text:data.reply_en}];});
       registerActivity("talk");
-    }catch(e){
-      setError(e.userMsg||"Problema al enviar. Intenta de nuevo.");
-      setMessages(m=>m.slice(0,-1));setInput(text);
-    }
+    }catch(e){setError(e.userMsg||"Problema al enviar. Intenta de nuevo.");setMessages(m=>m.slice(0,-1));setInput(text);}
     setLoading(false);
   };
 
@@ -655,13 +628,39 @@ function Talk({state,registerActivity}){
     <div className="fadein" style={{display:"flex",flexDirection:"column",minHeight:"calc(100vh - 140px)"}}>
       <h2 style={{fontSize:24,fontWeight:700,marginBottom:4}}>Conversar</h2>
       <p style={{marginBottom:14,fontSize:14,color:C.inkSoft}}>Escribe en inglés como puedas. Aquí <span className="hl">equivocarse es el método</span>.</p>
+
       {!scenario&&!loading&&(
-        <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:20,textAlign:"center"}}>
-          <p style={{fontFamily:FEN,fontSize:18,marginBottom:14}}>Ready when you are, {state.profile.name}.</p>
-          <BigButton onClick={newScenario}>Nueva situación</BigButton>
+        <div className="fadein">
+          {!showCustom?(
+            <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:20}}>
+              <p style={{fontFamily:FEN,fontSize:18,marginBottom:14,textAlign:"center"}}>Ready when you are, {state.profile.name}.</p>
+              <BigButton onClick={()=>newScenario(null)}>🎲 Situación aleatoria</BigButton>
+              <button onClick={()=>setShowCustom(true)}
+                style={{width:"100%",marginTop:10,padding:"13px 18px",borderRadius:14,border:`1.5px solid ${C.blue}`,background:"transparent",color:C.blue,fontWeight:600,fontSize:15}}>
+                ✏️ Proponer mi propio escenario
+              </button>
+            </div>
+          ):(
+            <div className="fadein" style={{background:C.card,border:`1.5px solid ${C.blue}`,borderRadius:16,padding:18}}>
+              <p style={{fontWeight:600,marginBottom:8}}>¿Qué situación quieres practicar?</p>
+              <p style={{fontSize:13,color:C.inkSoft,marginBottom:10}}>Descríbela en español — Fluido la adaptará a tu nivel y perfil.</p>
+              <textarea value={customSuggestion} onChange={e=>setCustomSuggestion(e.target.value)}
+                placeholder="Ej: una videollamada con un cliente en EE.UU. para presentar los avances del sprint... / pedir un aumento de sueldo a mi manager / conocer a un nuevo colega en una conferencia..."
+                rows={4} style={{width:"100%",padding:"12px 14px",fontSize:14,borderRadius:12,border:`1.5px solid ${C.line}`,outline:"none",resize:"vertical",background:C.paper,color:C.ink}}/>
+              <div style={{display:"flex",gap:8,marginTop:10}}>
+                <button onClick={()=>setShowCustom(false)} style={{flex:1,padding:"12px 0",borderRadius:12,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:500}}>Cancelar</button>
+                <button onClick={()=>newScenario(customSuggestion)} disabled={!customSuggestion.trim()}
+                  style={{flex:2,padding:"12px 0",borderRadius:12,border:"none",background:customSuggestion.trim()?C.blue:C.line,color:"#fff",fontWeight:600,fontSize:15}}>
+                  Generar escenario →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
+
       {scenario&&<div style={{background:C.blueSoft,borderRadius:12,padding:"10px 14px",marginBottom:12}}><strong style={{fontSize:14}}>{scenario.title_es}</strong><p style={{margin:"2px 0 0",fontSize:13,color:C.inkSoft}}>{scenario.context_es}</p></div>}
+
       <div style={{flex:1}}>
         {messages.map((m,i)=>(
           <div key={i} className="fadein" style={{marginBottom:10}}>
@@ -677,16 +676,20 @@ function Talk({state,registerActivity}){
         {error&&<p style={{color:C.coral,fontSize:14}}>{error}</p>}
         <div ref={bottomRef}/>
       </div>
+
       {scenario&&(
         <div style={{position:"sticky",bottom:80,marginTop:10}}>
           <div style={{display:"flex",gap:8,background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:8}}>
             <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
               placeholder="Write your reply in English…" rows={2}
-              style={{flex:1,border:"none",resize:"none",fontSize:16,outline:"none",background:"transparent",fontFamily:FEN}}/>
+              style={{flex:1,border:"none",resize:"none",fontSize:16,outline:"none",background:"transparent",fontFamily:FEN,color:C.ink}}/>
             <button onClick={send} disabled={loading||!input.trim()}
               style={{alignSelf:"flex-end",background:C.blue,color:"#fff",border:"none",borderRadius:10,padding:"10px 16px",fontWeight:600,opacity:loading||!input.trim()?0.5:1}}>Enviar</button>
           </div>
-          <button onClick={newScenario} style={{marginTop:8,background:"transparent",border:"none",color:C.inkSoft,fontSize:13,textDecoration:"underline"}}>Cambiar de situación</button>
+          <div style={{display:"flex",gap:12,marginTop:8}}>
+            <button onClick={()=>newScenario(null)} style={{background:"transparent",border:"none",color:C.inkSoft,fontSize:13,textDecoration:"underline"}}>🎲 Otra situación</button>
+            <button onClick={()=>{setScenario(null);setMessages([]);setShowCustom(true);setCustomSuggestion("");}} style={{background:"transparent",border:"none",color:C.blue,fontSize:13,textDecoration:"underline"}}>✏️ Proponer escenario</button>
+          </div>
         </div>
       )}
     </div>
@@ -694,14 +697,10 @@ function Talk({state,registerActivity}){
 }
 function Feedback({fb}){
   const hasErrors=fb.errors&&fb.errors.length>0;
-  if(!hasErrors&&!fb.natural_en&&!fb.tip_es)return<div style={{maxWidth:"85%",marginLeft:"auto",marginTop:4,fontSize:13,color:C.green,textAlign:"right"}}>✓ Perfecto, así se dice</div>;
+  if(!hasErrors&&!fb.natural_en&&!fb.tip_es) return<div style={{maxWidth:"85%",marginLeft:"auto",marginTop:4,fontSize:13,color:C.green,textAlign:"right"}}>✓ Perfecto, así se dice</div>;
   return(
     <div className="fadein" style={{maxWidth:"92%",marginLeft:"auto",marginTop:6,background:C.card,border:`1px dashed ${C.line}`,borderRadius:12,padding:"10px 12px",fontSize:14}}>
-      {hasErrors&&fb.errors.map((e,i)=>(
-        <p key={i} style={{margin:"0 0 6px",lineHeight:1.6}}>
-          <span className="hl-red" style={{fontFamily:FEN}}>{e.wrong}</span>{" → "}<span className="hl-green" style={{fontFamily:FEN}}>{e.right}</span>
-          <br/><span style={{color:C.inkSoft,fontSize:13}}>{e.why_es}</span>
-        </p>))}
+      {hasErrors&&fb.errors.map((e,i)=>(<p key={i} style={{margin:"0 0 6px",lineHeight:1.6}}><span className="hl-red" style={{fontFamily:FEN}}>{e.wrong}</span>{" → "}<span className="hl-green" style={{fontFamily:FEN}}>{e.right}</span><br/><span style={{color:C.inkSoft,fontSize:13}}>{e.why_es}</span></p>))}
       {fb.natural_en&&<p style={{margin:"6px 0 0",lineHeight:1.5}}><span style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Versión natural</span><br/><span className="hl" style={{fontFamily:FEN,fontSize:15}}>{fb.natural_en}</span></p>}
       {fb.tip_es&&<p style={{margin:"8px 0 0",fontSize:13,color:C.blue}}>💡 {fb.tip_es}</p>}
     </div>
@@ -722,7 +721,7 @@ function Phrases({state,save,registerActivity}){
   const card=due[0];
   const grade=g=>{
     const deck=state.deck.map(c=>{
-      if(c.id!==card.id)return c;
+      if(c.id!==card.id) return c;
       let interval=g==="again"?0:g==="good"?Math.max(1,(c.interval||0)*2):Math.max(3,(c.interval||1)*3);
       return{...c,interval,due:g==="again"?Date.now()+10*60*1000:Date.now()+interval*86400000,seen:c.seen+1};
     });
@@ -737,7 +736,7 @@ function Phrases({state,save,registerActivity}){
       let newPhrases=[...fromBank];
       if(newPhrases.length<5){
         const need=5-newPhrases.length;
-        const arr=await askAI_JSON(`Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera ${need} frases nuevas de inglés útiles para este perfil. NO repitas: ${state.deck.map(c=>c.en).slice(-40).join(" | ")}\n\nDevuelve JSON array: [{"es":"en español","en":"en inglés","note_es":"nota breve"}]`,
+        const arr=await askAI_JSON(`Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera ${need} frases nuevas útiles para este perfil. NO repitas: ${state.deck.map(c=>c.en).slice(-40).join(" | ")}\n\nDevuelve JSON array: [{"es":"español","en":"inglés","note_es":"nota breve"}]`,
           "Eres un profesor de inglés práctico.");
         newPhrases=[...newPhrases,...arr.map(p=>({es:p.es,en:p.en,note_es:p.note_es||""}))];
         bank.phrases=[...bank.phrases,...arr.map(p=>({es:p.es,en:p.en,note_es:p.note_es||""}))];
@@ -795,8 +794,10 @@ function Phrases({state,save,registerActivity}){
 function GradeBtn({color,bg,onClick,label,sub}){return(<button onClick={onClick} style={{flex:1,padding:"10px 4px",borderRadius:12,border:`1.5px solid ${color}`,background:bg,color,fontWeight:600,fontSize:14}}>{label}<div style={{fontSize:10,fontWeight:400,marginTop:2,opacity:0.8}}>{sub}</div></button>);}
 
 // ============================================================
-// ESCUCHAR
+// ESCUCHAR — velocidades 0.5, 0.8, 1, 1.5, 2
 // ============================================================
+const SPEEDS=[{v:0.5,l:"0.5×"},{v:0.8,l:"0.8×"},{v:1.0,l:"Normal"},{v:1.5,l:"1.5×"},{v:2.0,l:"2×"}];
+
 function Listen({state,save,registerActivity}){
   const [exercise,setExercise]=useState(null);
   const [loading,setLoading]=useState(false);
@@ -805,7 +806,7 @@ function Listen({state,save,registerActivity}){
   const [picked,setPicked]=useState(null);
   const [revealed,setRevealed]=useState(false);
   const [readingMode,setReadingMode]=useState(false);
-  const [rate,setRate]=useState(0.85);
+  const [rate,setRate]=useState(1.0);
   const [playing,setPlaying]=useState(false);
   const {speak,stop,failed,supported}=useSpeech();
   useEffect(()=>()=>stop(),[stop]);
@@ -822,12 +823,13 @@ function Listen({state,save,registerActivity}){
         setExercise(pick);save({...state,usedListening:[...(state.usedListening||[]),pick.id].slice(-300)});
         setInfo("♻️ Audio del banco local — sin costo de IA.");setLoading(false);return;
       }
-      const data=await askAI_JSON(`Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera un ejercicio de listening: diálogo (4-6 líneas) entre dos personas sobre los objetivos o intereses del estudiante (semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve JSON: {"title_es":"título","dialogue":[{"speaker":"nombre","line":"inglés"}],"question_es":"pregunta de comprensión","options_es":["A","B","C"],"correct_index":0,"key_phrase_en":"expresión útil","key_phrase_es":"traducción"}`,
+      const data=await askAI_JSON(
+        `Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera un ejercicio de listening en inglés para este perfil: diálogo (4-6 líneas) entre dos personas sobre sus objetivos o intereses. Varía el tema (semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve JSON: {"title_es":"título","dialogue":[{"speaker":"nombre","line":"inglés"}],"question_es":"pregunta de comprensión","options_es":["A","B","C"],"correct_index":0,"key_phrase_en":"expresión útil","key_phrase_es":"traducción"}`,
         "Eres un profesor de inglés que crea ejercicios de listening realistas.");
       data.id="L"+Date.now()+Math.random().toString(36).slice(2,6);data.level=state.level;
       setExercise(data);const bank2=loadBank();bank2.listening=[...bank2.listening,data];saveBank(bank2);
       save({...state,usedListening:[...(state.usedListening||[]),data.id].slice(-300)});
-    }catch(e){setError(e.userMsg||"Error al obtener el ejercicio. Intenta de nuevo.");}
+    }catch(e){setError(e.userMsg||"Error al obtener el ejercicio.");}
     setLoading(false);
   };
   const play=()=>{if(!exercise)return;setPlaying(true);speak(exercise.dialogue,{rate,onEnd:()=>setPlaying(false)});};
@@ -851,11 +853,11 @@ function Listen({state,save,registerActivity}){
                 <div style={{display:"flex",alignItems:"center",gap:10,marginTop:12}}>
                   <button onClick={playing?stopAll:play} style={{width:56,height:56,borderRadius:"50%",border:"none",background:C.blue,color:"#fff",fontSize:22}} aria-label={playing?"Detener":"Reproducir"}>{playing?"■":"▶"}</button>
                   <div style={{flex:1}}>
-                    <p style={{fontSize:13,color:C.inkSoft}}>Velocidad</p>
-                    <div style={{display:"flex",gap:6,marginTop:4}}>
-                      {[{v:0.7,l:"Lenta"},{v:0.85,l:"Normal"},{v:1.0,l:"Nativa"}].map(o=>(
+                    <p style={{fontSize:12,color:C.inkSoft,marginBottom:5}}>Velocidad de reproducción</p>
+                    <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                      {SPEEDS.map(o=>(
                         <button key={o.v} onClick={()=>setRate(o.v)}
-                          style={{padding:"4px 10px",borderRadius:8,fontSize:12,fontWeight:600,border:`1.5px solid ${rate===o.v?C.blue:C.line}`,background:rate===o.v?C.blueSoft:"transparent",color:rate===o.v?C.blue:C.inkSoft}}>
+                          style={{padding:"5px 10px",borderRadius:8,fontSize:12,fontWeight:600,border:`1.5px solid ${rate===o.v?C.blue:C.line}`,background:rate===o.v?C.blueSoft:"transparent",color:rate===o.v?C.blue:C.inkSoft}}>
                           {o.l}
                         </button>))}
                     </div>
@@ -907,7 +909,7 @@ function Listen({state,save,registerActivity}){
 }
 function ReadOnce({dialogue}){
   const [visible,setVisible]=useState(true);
-  if(!visible)return<p style={{fontSize:13,color:C.inkSoft,fontStyle:"italic"}}>Diálogo oculto. Responde la pregunta de memoria 👇</p>;
+  if(!visible) return<p style={{fontSize:13,color:C.inkSoft,fontStyle:"italic"}}>Diálogo oculto. Responde la pregunta de memoria 👇</p>;
   return(
     <div>
       <div style={{background:C.paper,borderRadius:12,padding:12}}>
@@ -919,18 +921,17 @@ function ReadOnce({dialogue}){
 }
 
 // ============================================================
-// AJUSTES — rediseñados con ping por proveedor
+// AJUSTES — con selector de tema
 // ============================================================
-function Settings({state,save,onAIChanged}){
+function Settings({state,save,onAIChanged,onThemeChange}){
   const [expanded,setExpanded]=useState(null);
   const [editKeys,setEditKeys]=useState({});
   const [testState,setTestState]=useState({});
+  const savedTheme=getSavedTheme();
 
   const cfg=getAIConfig()||{active:null,keys:{}};
   const savedKeys=cfg.keys||{};
-
   const setTS=(pid,val)=>setTestState(t=>({...t,[pid]:val}));
-
   const getKey=pid=>editKeys[pid]!==undefined?editKeys[pid]:(savedKeys[pid]||"");
 
   const handleTest=async(pid)=>{
@@ -940,59 +941,61 @@ function Settings({state,save,onAIChanged}){
     try{
       await pingProvider(pid,key);
       setTS(pid,{ok:true});
-      // Auto-guardar la clave al probar exitosamente
-      const newCfg={active:cfg.active||pid,keys:{...savedKeys,[pid]:key}};
-      setAIConfig(newCfg);
+      setAIConfig({active:cfg.active||pid,keys:{...savedKeys,[pid]:key}});
     }catch(e){setTS(pid,{error:e.userMsg||e.message||"Error de conexión."});}
   };
-
   const handleActivate=pid=>{
-    const key=getKey(pid).trim();
-    if(!key)return;
-    setAIConfig({active:pid,keys:{...savedKeys,[pid]:key}});
-    onAIChanged();
+    const key=getKey(pid).trim(); if(!key) return;
+    setAIConfig({active:pid,keys:{...savedKeys,[pid]:key}});onAIChanged();
   };
-
   const handleDisconnect=()=>{
-    if(!window.confirm("¿Desconectar la IA? Deberás volver a configurar la clave."))return;
+    if(!window.confirm("¿Desconectar la IA?")) return;
     localStorage.removeItem(AI_KEY);localStorage.removeItem("fluido-ai");onAIChanged();
   };
-
-  const resetProfile=()=>{
-    if(!window.confirm("¿Rehacer el cuestionario? Tu racha y mazo se mantienen."))return;
-    save({...state,profile:null});
-  };
-  const resetAll=()=>{
-    if(!window.confirm("⚠️ Esto borra TODO incluyendo claves y progreso. ¿Seguro?"))return;
-    localStorage.clear();window.location.reload();
-  };
-
+  const resetProfile=()=>{if(!window.confirm("¿Rehacer el cuestionario? Tu racha y mazo se mantienen.")) return;save({...state,profile:null});};
+  const resetAll=()=>{if(!window.confirm("⚠️ Borra TODO incluyendo claves y progreso. ¿Seguro?")) return;localStorage.clear();window.location.reload();};
   const activeProv=PROVIDERS.find(p=>p.id===cfg.active);
 
   return(
     <div className="fadein">
       <h2 style={{fontSize:24,fontWeight:700,marginBottom:14}}>Ajustes</h2>
 
-      {/* Banner proveedor activo */}
+      {/* --- TEMA --- */}
+      <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:14}}>
+        <p style={{fontWeight:600,marginBottom:4}}>🎨 Tema y apariencia</p>
+        <p style={{fontSize:13,color:C.inkSoft,marginBottom:12}}>Elige un estilo — se guarda automáticamente.</p>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+          {THEMES.map(t=>{
+            const selected=savedTheme===t.id;
+            return(
+              <button key={t.id} onClick={()=>onThemeChange(t.id)}
+                style={{borderRadius:12,border:`2px solid ${selected?t.preview:"transparent"}`,padding:"10px 4px",background:t.dark?"#1E293B":"#FFFFFF",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:5,boxShadow:selected?`0 0 0 3px ${t.preview}44`:"none"}}>
+                {/* preview strip */}
+                <div style={{width:36,height:20,borderRadius:6,background:`linear-gradient(135deg, ${t.dark?"#0F172A":"#F7F9FB"} 50%, ${t.preview} 50%)`}}/>
+                <span style={{fontSize:9,fontWeight:600,color:t.dark?"#F1F5F9":"#13243B",lineHeight:1.2,textAlign:"center"}}>{t.label}</span>
+                {selected&&<span style={{fontSize:9,color:t.preview,fontWeight:700}}>✓</span>}
+              </button>);
+          })}
+        </div>
+      </div>
+
+      {/* --- IA ACTIVA --- */}
       {activeProv?(
         <div style={{background:C.greenSoft,border:`1px solid ${C.green}`,borderRadius:14,padding:"12px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
-            <div style={{fontSize:11,color:C.green,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>IA activa ahora</div>
+            <div style={{fontSize:11,color:C.green,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>IA activa</div>
             <div style={{fontWeight:700,fontSize:16,marginTop:2}}>{activeProv.emoji} {activeProv.name}</div>
           </div>
           <button onClick={handleDisconnect} style={{border:"none",background:"transparent",color:C.coral,fontSize:13,fontWeight:600}}>Desconectar</button>
         </div>
       ):(
         <div style={{background:C.coralSoft,border:`1px solid ${C.coral}`,borderRadius:14,padding:"12px 16px",marginBottom:14}}>
-          <p style={{color:C.coral,fontWeight:600,margin:0}}>Sin IA configurada — expande un proveedor abajo para conectar.</p>
+          <p style={{color:C.coral,fontWeight:600,margin:0}}>Sin IA configurada — expande un proveedor para conectar.</p>
         </div>
       )}
+      <p style={{fontSize:12,color:C.inkSoft,marginBottom:12,lineHeight:1.6}}>🔐 Tus claves se guardan <strong>solo en este navegador</strong>. Cada usuario configura las suyas al abrir la app por primera vez.</p>
 
-      <p style={{fontSize:12,color:C.inkSoft,marginBottom:14,lineHeight:1.6}}>
-        🔐 Tus claves se guardan <strong>solo en este navegador</strong>. Cada usuario configura las suyas al abrir la app por primera vez.
-      </p>
-
-      {/* Lista de proveedores */}
+      {/* --- PROVEEDORES --- */}
       {PROVIDERS.map(p=>{
         const isActive=cfg.active===p.id;
         const savedKey=savedKeys[p.id]||"";
@@ -1000,10 +1003,8 @@ function Settings({state,save,onAIChanged}){
         const ts=testState[p.id]||{};
         const isExpanded=expanded===p.id;
         const hasValidKey=ts.ok||(savedKey&&editKeys[p.id]===undefined);
-
         return(
           <div key={p.id} style={{background:C.card,border:`1.5px solid ${isActive?C.green:C.line}`,borderRadius:14,marginBottom:10,overflow:"hidden"}}>
-            {/* Cabecera colapsable */}
             <button onClick={()=>setExpanded(isExpanded?null:p.id)}
               style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",border:"none",background:"transparent",textAlign:"left"}}>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -1019,54 +1020,41 @@ function Settings({state,save,onAIChanged}){
                 <span style={{color:C.inkSoft,fontSize:14}}>{isExpanded?"▲":"▼"}</span>
               </div>
             </button>
-
-            {/* Cuerpo expandido */}
             {isExpanded&&(
               <div className="fadein" style={{padding:"0 16px 16px",borderTop:`1px solid ${C.line}`}}>
-                {/* Instrucciones */}
                 <div style={{background:C.paper,borderRadius:10,padding:10,fontSize:13,lineHeight:1.8,margin:"12px 0"}}>
                   {p.helpSteps.map((s,i)=><div key={i}>{i+1}. {s}</div>)}
                   <a href={p.helpUrl} target="_blank" rel="noreferrer" style={{color:C.blue,fontWeight:600}}>→ {p.helpUrl.replace("https://","")}</a>
                 </div>
-
-                {/* Input de clave */}
                 <input type="password" value={displayKey}
                   onChange={e=>{setEditKeys(k=>({...k,[p.id]:e.target.value}));setTS(p.id,{});}}
                   placeholder={p.keyPlaceholder}
-                  style={{width:"100%",padding:"12px 14px",fontSize:15,borderRadius:12,border:`1.5px solid ${ts.ok?C.green:ts.error?C.coral:C.line}`,outline:"none"}}
-                />
+                  style={{width:"100%",padding:"12px 14px",fontSize:15,borderRadius:12,border:`1.5px solid ${ts.ok?C.green:ts.error?C.coral:C.line}`,outline:"none",background:C.card,color:C.ink}}/>
                 {ts.error&&<p style={{color:C.coral,fontSize:13,marginTop:6}}>❌ {ts.error}</p>}
                 {ts.ok&&<p style={{color:C.green,fontSize:13,marginTop:6}}>✓ Conexión exitosa</p>}
-
-                {/* Botones: Probar + Activar */}
                 <div style={{display:"flex",gap:8,marginTop:10}}>
                   <button onClick={()=>handleTest(p.id)} disabled={ts.testing||!displayKey.trim()}
                     style={{flex:1,padding:"10px 0",borderRadius:10,border:`1.5px solid ${C.blue}`,background:C.blueSoft,color:C.blue,fontWeight:600,fontSize:14,opacity:ts.testing||!displayKey.trim()?0.5:1}}>
-                    {ts.testing?"Probando…":"⚡ Probar conexión"}
+                    {ts.testing?"Probando…":"⚡ Probar"}
                   </button>
-                  {!isActive&&(
-                    <button onClick={()=>handleActivate(p.id)} disabled={!hasValidKey}
-                      style={{flex:1,padding:"10px 0",borderRadius:10,border:"none",background:hasValidKey?C.blue:C.line,color:"#fff",fontWeight:600,fontSize:14,opacity:hasValidKey?1:0.5}}>
-                      Activar
-                    </button>
-                  )}
-                  {isActive&&(
-                    <button disabled style={{flex:1,padding:"10px 0",borderRadius:10,border:"none",background:C.greenSoft,color:C.green,fontWeight:600,fontSize:14}}>✓ Activa</button>
-                  )}
+                  {!isActive&&<button onClick={()=>handleActivate(p.id)} disabled={!hasValidKey}
+                    style={{flex:1,padding:"10px 0",borderRadius:10,border:"none",background:hasValidKey?C.blue:C.line,color:"#fff",fontWeight:600,fontSize:14,opacity:hasValidKey?1:0.5}}>
+                    Activar
+                  </button>}
+                  {isActive&&<button disabled style={{flex:1,padding:"10px 0",borderRadius:10,border:"none",background:C.greenSoft,color:C.green,fontWeight:600,fontSize:14}}>✓ Activa</button>}
                 </div>
               </div>
             )}
-          </div>
-        );
+          </div>);
       })}
 
-      {/* Datos */}
+      {/* --- DATOS --- */}
       <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginTop:6}}>
         <p style={{fontWeight:600,marginBottom:10}}>Perfil y datos</p>
         <button onClick={resetProfile} style={{width:"100%",padding:"12px 16px",borderRadius:12,border:`1.5px solid ${C.line}`,background:"transparent",color:C.ink,fontWeight:500,marginBottom:8}}>Rehacer cuestionario inicial</button>
         <button onClick={resetAll} style={{width:"100%",padding:"12px 16px",borderRadius:12,border:`1.5px solid ${C.coral}`,background:C.coralSoft,color:C.coral,fontWeight:600}}>⚠️ Borrar todo y empezar de cero</button>
       </div>
-      <p style={{fontSize:11,color:C.inkSoft,marginTop:16,textAlign:"center"}}>Fluido v4 · hecho desde Chile 🇨🇱</p>
+      <p style={{fontSize:11,color:C.inkSoft,marginTop:16,textAlign:"center"}}>Fluido v5 · hecho desde Chile 🇨🇱</p>
     </div>
   );
 }
