@@ -231,7 +231,26 @@ async function askAI_JSON(userPrompt,system) {
   migrateOldConfig(); const cfg=getAIConfig();
   if(!cfg||!cfg.active||!cfg.keys?.[cfg.active]){const e=new Error("NO_KEY");e.code="NO_KEY";throw e;}
   const sys=(system||"")+"\nIMPORTANTE: Responde ÚNICAMENTE con JSON válido. Sin texto antes ni después, sin backticks de Markdown.";
-  return callAI(cfg.active,cfg.keys[cfg.active],sys,userPrompt);
+  // Cadena de respaldo: proveedor activo primero, luego los demás configurados
+  const useFallback = cfg.fallback !== false; // activado por defecto
+  const order = useFallback
+    ? [cfg.active, ...PROVIDERS.map(p=>p.id).filter(id=>id!==cfg.active && cfg.keys[id])]
+    : [cfg.active];
+  let firstErr=null;
+  for(const pid of order){
+    try{
+      const res = await callAI(pid, cfg.keys[pid], sys, userPrompt);
+      window.__fluidoUsedProvider = pid; // para mostrar en UI si fue respaldo
+      return res;
+    }catch(e){
+      if(!firstErr) firstErr=e;
+      // BAD_KEY del activo o RATE o NO_CREDITS → probar siguiente
+      continue;
+    }
+  }
+  // Todos fallaron: reportar el error del proveedor activo (el más relevante)
+  if(firstErr && !firstErr.userMsg) firstErr.userMsg="Ningún proveedor configurado respondió. Revisa Ajustes.";
+  throw firstErr || Object.assign(new Error("ALL_FAILED"),{code:"API",userMsg:"Ningún proveedor respondió."});
 }
 async function pingProvider(pid,key) {
   const sys="Responde ÚNICAMENTE con JSON válido.\nIMPORTANTE: Responde ÚNICAMENTE con JSON válido. Sin texto antes ni después, sin backticks de Markdown.";
@@ -1156,6 +1175,23 @@ function Settings({state,save,onAIChanged,onThemeChange}){
         <div style={{background:C.coralSoft,border:`1px solid ${C.coral}`,borderRadius:14,padding:"12px 16px",marginBottom:14}}>
           <p style={{color:C.coral,fontWeight:600,margin:0}}>Sin IA configurada — expande un proveedor para conectar.</p>
         </div>
+      )}
+      {/* Toggle de respaldo automático */}
+      {activeProv&&(
+        <button onClick={()=>{
+            const newVal = cfg.fallback === false ? true : false;
+            setAIConfig({...cfg, fallback:newVal});
+            onAIChanged();
+          }}
+          style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:C.card,border:`1px solid ${C.line}`,borderRadius:14,padding:"12px 16px",marginBottom:14,textAlign:"left"}}>
+          <div>
+            <div style={{fontWeight:600,fontSize:14,color:C.ink}}>🔁 Respaldo automático</div>
+            <div style={{fontSize:12,color:C.inkSoft,marginTop:2}}>Si {activeProv.name} falla o llega al límite, Fluido usa automáticamente los otros proveedores que tengas configurados.</div>
+          </div>
+          <div style={{width:44,height:26,borderRadius:13,background:cfg.fallback!==false?C.green:C.line,position:"relative",flexShrink:0,marginLeft:10,transition:"background .2s"}}>
+            <div style={{width:20,height:20,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:cfg.fallback!==false?21:3,transition:"left .2s"}}/>
+          </div>
+        </button>
       )}
       <p style={{fontSize:12,color:C.inkSoft,marginBottom:12,lineHeight:1.6}}>🔐 Tus claves se guardan <strong>solo en este navegador</strong>. Cada usuario configura las suyas al abrir la app por primera vez.</p>
 
