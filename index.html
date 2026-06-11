@@ -13,7 +13,7 @@
   button { font-family: 'Lexend', system-ui, sans-serif; cursor: pointer; color: inherit; }
   textarea, input, select { font-family: 'Lexend', system-ui, sans-serif; }
   body { background: var(--paper, #F7F9FB); color: var(--ink, #13243B); }
-  .hl  { background: linear-gradient(transparent 55%, var(--marker) 55%); padding: 0 2px; color: #1E293B !important; }
+  .hl  { background: var(--marker); padding: 1px 5px; border-radius: 4px; color: #1E293B !important; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
   .hl-red   { background: linear-gradient(transparent 55%, #FDEDEA 0%); text-decoration: line-through; text-decoration-color: #B91C1C; padding: 0 2px; color: #7F1D1D !important; }
   .hl-green { background: linear-gradient(transparent 55%, #D1FAE5 0%); padding: 0 2px; font-weight: 600; color: #064E3B !important; }
   .fadein { animation: fadein .3s ease; }
@@ -618,16 +618,11 @@ function Home({state,save,go}){
         })}
         {allDone&&<div className="fadein" style={{background:C.greenSoft,border:`1px solid ${C.green}`,borderRadius:14,padding:14,textAlign:"center",fontWeight:600,color:C.green}}>¡Misiones completas, {state.profile.name}! Nos vemos mañana 🔥</div>}
       </div>
-      <div style={{marginTop:22}}>
-        <p style={{fontSize:13,color:C.inkSoft,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Tu nivel</p>
-        <div style={{display:"flex",gap:8}}>
-          {LEVELS.map(lv=>(
-            <button key={lv.id} onClick={()=>save({...state,level:lv.id})}
-              style={{flex:1,padding:"10px 6px",borderRadius:12,border:`2px solid ${state.level===lv.id?C.blue:C.line}`,background:state.level===lv.id?C.blueSoft:C.card,color:state.level===lv.id?C.blue:C.inkSoft,fontWeight:600,fontSize:14}}>
-              {lv.label}<div style={{fontSize:10,fontWeight:400,marginTop:2}}>{lv.desc}</div>
-            </button>))}
-        </div>
-      </div>
+      <button onClick={()=>go("settings")}
+        style={{width:"100%",marginTop:22,display:"flex",justifyContent:"space-between",alignItems:"center",background:C.card,border:`1px solid ${C.line}`,borderRadius:14,padding:"13px 16px"}}>
+        <span style={{fontSize:14,color:C.inkSoft}}>🎯 Tu nivel: <strong style={{color:C.ink}}>{(LEVELS.find(l=>l.id===state.level)||{}).label||state.level}</strong></span>
+        <span style={{fontSize:13,color:C.blue,fontWeight:600}}>Cambiar →</span>
+      </button>
     </div>
   );
 }
@@ -1145,6 +1140,19 @@ function Settings({state,save,onAIChanged,onThemeChange}){
                 {selected&&<span style={{fontSize:9,color:t.preview,fontWeight:700}}>✓</span>}
               </button>);
           })}
+        </div>
+      </div>
+
+      {/* --- NIVEL --- */}
+      <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:14}}>
+        <p style={{fontWeight:600,marginBottom:4}}>🎯 Tu nivel de inglés</p>
+        <p style={{fontSize:13,color:C.inkSoft,marginBottom:12}}>Define la dificultad de todos los ejercicios.</p>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {LEVELS.map(lv=>(
+            <button key={lv.id} onClick={()=>save({...state,level:lv.id})}
+              style={{flex:"1 1 45%",padding:"10px 6px",borderRadius:12,border:`2px solid ${state.level===lv.id?C.blue:C.line}`,background:state.level===lv.id?C.blueSoft:"transparent",color:state.level===lv.id?C.blue:C.inkSoft,fontWeight:600,fontSize:13}}>
+              {lv.label}<div style={{fontSize:10,fontWeight:400,marginTop:2}}>{lv.desc}</div>
+            </button>))}
         </div>
       </div>
 
