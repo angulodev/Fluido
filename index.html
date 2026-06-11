@@ -10,7 +10,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; }
-  button { font-family: 'Lexend', system-ui, sans-serif; cursor: pointer; }
+  button { font-family: 'Lexend', system-ui, sans-serif; cursor: pointer; color: inherit; }
   textarea, input, select { font-family: 'Lexend', system-ui, sans-serif; }
   body { background: var(--paper, #F7F9FB); color: var(--ink, #13243B); }
   .hl  { background: linear-gradient(transparent 55%, var(--marker) 55%); padding: 0 2px; color: #1E293B !important; }
@@ -1302,7 +1302,6 @@ function Grammar({state, registerActivity}){
     setTotal(t=>t+1);
     if(isRight) setCorrect(c=>c+1);
     registerActivity("grammar");
-    setTimeout(()=>nextCard(), 1400);
   };
 
   if(!card) return(
@@ -1341,6 +1340,12 @@ function Grammar({state, registerActivity}){
               : <span style={{color:C.coral,fontWeight:600}}>✗ Era: <strong style={{fontFamily:"'Newsreader',Georgia,serif"}}>{card.ans}</strong></span>}
             {card.hint&&<span style={{color:C.inkSoft}}> — {card.hint}</span>}
           </div>
+        )}
+        {picked!==null&&(
+          <button onClick={nextCard} className="fadein"
+            style={{width:"100%",marginTop:12,padding:"13px 0",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontWeight:600,fontSize:15}}>
+            Siguiente pregunta →
+          </button>
         )}
       </div>
     </div>
@@ -1488,59 +1493,136 @@ function Verbs({registerActivity}){
 }
 
 // ============================================================
-// VOCABULARIO — 2921 palabras en 28 bloques temáticos (Nivel 0 friendly)
+// VOCABULARIO v2 — SRS + lista por bloque + contadores de pendientes
 // ============================================================
+function vocabLoadSrs(){try{return JSON.parse(localStorage.getItem("fluido-vocab-srs")||"{}");}catch(e){return{};}}
+function vocabSaveSrs(m){try{localStorage.setItem("fluido-vocab-srs",JSON.stringify(m));}catch(e){}}
+
 function Vocabulary({registerActivity}){
   const [block,setBlock]=useState(null);
-  const [idx,setIdx]=useState(0);
+  const [current,setCurrent]=useState(null);
   const [flipped,setFlipped]=useState(false);
+  const [showList,setShowList]=useState(false);
+  const [,setTick]=useState(0);
   const {speak}=useSpeech();
 
+  const srsNow=vocabLoadSrs();
+  const now=Date.now();
+  const dueOf=(b)=>b.words.filter(w=>{const d=srsNow[w.en.toLowerCase()];return !d||d.due<=now;}).length;
+
+  const pick=(b,force)=>{
+    const s=vocabLoadSrs();const n=Date.now();
+    const pool=force?b.words:b.words.filter(w=>{const d=s[w.en.toLowerCase()];return !d||d.due<=n;});
+    if(!pool.length){setCurrent(null);setFlipped(false);return;}
+    setCurrent(pool[Math.floor(Math.random()*pool.length)]);setFlipped(false);
+  };
+
+  const grade=(g)=>{
+    if(!current||!block) return;
+    const s=vocabLoadSrs();
+    const k=current.en.toLowerCase();
+    const prev=s[k]||{interval:0,seen:0};
+    let interval=g==="again"?0:g==="good"?Math.max(1,(prev.interval||0)*2):Math.max(3,(prev.interval||1)*3);
+    const dueTs=g==="again"?Date.now()+10*60*1000:Date.now()+interval*86400000;
+    s[k]={interval,due:dueTs,seen:(prev.seen||0)+1};
+    vocabSaveSrs(s);setTick(t=>t+1);
+    registerActivity("phrases");
+    pick(block,false);
+  };
+
+  // ── Grid de bloques ──
   if(!block) return(
     <div className="fadein">
-      <p style={{fontSize:14,color:C.inkSoft,marginBottom:12}}>2.921 palabras esenciales en 28 bloques. <span className="hl">Elige un tema</span> y aprende con tarjetas traducidas.</p>
+      <p style={{fontSize:14,color:C.inkSoft,marginBottom:12}}>2.921 palabras esenciales en 28 bloques. <span className="hl">Elige un tema</span> — las que marques como fáciles dejan de aparecer hasta que toque repasarlas.</p>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-        {BANK_WORDS.map(b=>(
-          <button key={b.n} onClick={()=>{setBlock(b);setIdx(0);setFlipped(false);}}
-            style={{padding:"12px 10px",borderRadius:12,border:`1.5px solid ${C.line}`,background:C.card,textAlign:"left"}}>
-            <div style={{fontSize:22}}>{b.icon}</div>
-            <div style={{fontWeight:600,fontSize:13,marginTop:4,color:C.ink}}>{b.name}</div>
-            <div style={{fontSize:11,color:C.inkSoft}}>{b.words.length} palabras</div>
-          </button>))}
+        {BANK_WORDS.map(b=>{
+          const due=dueOf(b);
+          const done=due===0;
+          return(
+            <button key={b.n} onClick={()=>{setBlock(b);setShowList(false);pick(b,false);}}
+              style={{padding:"12px 10px",borderRadius:12,border:`1.5px solid ${done?C.green:C.line}`,background:C.card,textAlign:"left"}}>
+              <div style={{fontSize:22}}>{b.icon}</div>
+              <div style={{fontWeight:600,fontSize:13,marginTop:4,color:C.ink}}>{b.name}</div>
+              <div style={{fontSize:11,color:done?C.green:C.inkSoft,fontWeight:done?700:400}}>
+                {done?"✓ Al día":`⏰ ${due}/${b.words.length} por repasar`}
+              </div>
+            </button>);
+        })}
       </div>
     </div>
   );
 
-  const w=block.words[idx];
-  const next=()=>{setIdx(i=>(i+1)%block.words.length);setFlipped(false);registerActivity("phrases");};
-  const prev=()=>{setIdx(i=>(i-1+block.words.length)%block.words.length);setFlipped(false);};
+  const blockDue=dueOf(block);
 
+  // ── Vista de bloque ──
   return(
     <div className="fadein">
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-        <button onClick={()=>setBlock(null)} style={{border:"none",background:"transparent",color:C.blue,fontSize:13,fontWeight:600}}>← Bloques</button>
-        <span style={{fontSize:13,color:C.inkSoft}}>{block.icon} {block.name} · {idx+1}/{block.words.length}</span>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8}}>
+        <button onClick={()=>{setBlock(null);setCurrent(null);}} style={{border:"none",background:"transparent",color:C.blue,fontSize:13,fontWeight:600,flexShrink:0}}>← Bloques</button>
+        <span style={{fontSize:12,color:C.inkSoft,textAlign:"center"}}>{block.icon} {block.name}<br/>⏰ {blockDue} por repasar</span>
+        <button onClick={()=>setShowList(v=>!v)}
+          style={{border:`1.5px solid ${C.blue}`,background:showList?C.blueSoft:"transparent",color:C.blue,fontSize:12,fontWeight:600,borderRadius:10,padding:"6px 10px",flexShrink:0}}>
+          {showList?"🎴 Tarjetas":"📋 Lista"}
+        </button>
       </div>
-      <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:18,padding:24,minHeight:190,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
-        <div style={{textAlign:"center"}}>
-          <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5}}>{flipped?"En inglés":"¿Cómo se dice…?"}</p>
-          <p style={{fontSize:28,fontWeight:700,margin:"14px 0 6px"}}>{w.es}</p>
-          {flipped&&(
-            <p className="fadein" style={{fontSize:30,fontFamily:"'Newsreader',Georgia,serif",margin:"4px 0"}}>
-              <span className="hl">{w.en}</span>
-              <button onClick={()=>speak(w.en)} aria-label="Escuchar" style={{border:"none",background:"transparent",fontSize:22,marginLeft:8}}>🔊</button>
-            </p>
-          )}
+
+      {/* Lista completa del bloque */}
+      {showList&&(
+        <div className="fadein" style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:14,maxHeight:"55vh",overflowY:"auto",padding:"6px 0"}}>
+          {block.words.map((w,i)=>{
+            const d=srsNow[w.en.toLowerCase()];
+            const learned=d&&d.due>now;
+            return(
+              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 14px",borderBottom:i<block.words.length-1?`1px solid ${C.line}`:"none"}}>
+                <div>
+                  <span style={{fontSize:14,color:C.ink}}>{w.es}</span>
+                  <span style={{fontSize:14,color:C.inkSoft}}> — </span>
+                  <span style={{fontFamily:"'Newsreader',Georgia,serif",fontSize:15,fontWeight:600,color:C.ink}}>{w.en}</span>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                  {learned&&<span style={{fontSize:11,color:C.green}}>✓</span>}
+                  <button onClick={()=>speak(w.en)} style={{border:"none",background:"transparent",fontSize:15}}>🔊</button>
+                </div>
+              </div>);
+          })}
         </div>
-        {!flipped?(
-          <BigButton onClick={()=>{setFlipped(true);speak(w.en);}}>Mostrar en inglés</BigButton>
-        ):(
-          <div style={{display:"flex",gap:8,marginTop:14}}>
-            <button onClick={prev} style={{flex:1,padding:"11px 0",borderRadius:12,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:600}}>← Anterior</button>
-            <button onClick={next} style={{flex:2,padding:"11px 0",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontWeight:600}}>Siguiente →</button>
+      )}
+
+      {/* Modo tarjetas con SRS */}
+      {!showList&&(
+        current?(
+          <div className="fadein" style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:18,padding:24,minHeight:200,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
+            <div style={{textAlign:"center"}}>
+              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5}}>{flipped?"En inglés":"¿Cómo se dice…?"}</p>
+              <p style={{fontSize:28,fontWeight:700,margin:"14px 0 6px",color:C.ink}}>{current.es}</p>
+              {flipped&&(
+                <p className="fadein" style={{fontSize:30,fontFamily:"'Newsreader',Georgia,serif",margin:"4px 0"}}>
+                  <span className="hl">{current.en}</span>
+                  <button onClick={()=>speak(current.en)} aria-label="Escuchar" style={{border:"none",background:"transparent",fontSize:22,marginLeft:8}}>🔊</button>
+                </p>
+              )}
+            </div>
+            {!flipped?(
+              <BigButton onClick={()=>{setFlipped(true);speak(current.en);}}>Mostrar en inglés</BigButton>
+            ):(
+              <div style={{display:"flex",gap:8,marginTop:16}}>
+                <GradeBtn color={C.coral} bg={C.coralSoft} onClick={()=>grade("again")} label="Otra vez" sub="en 10 min"/>
+                <GradeBtn color={C.blue} bg={C.blueSoft} onClick={()=>grade("good")} label="Bien" sub="días"/>
+                <GradeBtn color={C.green} bg={C.greenSoft} onClick={()=>grade("easy")} label="Fácil" sub="más días"/>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        ):(
+          <div className="fadein" style={{background:C.greenSoft,border:`1px solid ${C.green}`,borderRadius:16,padding:20,textAlign:"center"}}>
+            <p style={{fontWeight:600,color:C.green,marginBottom:4}}>✓ Bloque al día</p>
+            <p style={{fontSize:13,color:C.inkSoft,marginBottom:12}}>Dominaste las palabras pendientes de hoy. Vuelve mañana o repasa extra.</p>
+            <button onClick={()=>pick(block,true)}
+              style={{padding:"10px 18px",borderRadius:12,border:`1.5px solid ${C.green}`,background:"transparent",color:C.green,fontWeight:600,fontSize:14}}>
+              🎲 Repasar una al azar igual
+            </button>
+          </div>
+        )
+      )}
     </div>
   );
 }
