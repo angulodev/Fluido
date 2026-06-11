@@ -135,7 +135,7 @@ const yesterdayStr = () => { const d=new Date(Date.now()-86400000); return `${d.
 const PROVIDERS = [
   { id:"gemini",     name:"Google Gemini",    emoji:"🔵", tag:"GRATIS · Recomendado",        tagColor:"#1FA86B", keyPrefix:null,      keyPlaceholder:"Pega tu clave de AI Studio…", helpUrl:"https://aistudio.google.com/apikey", helpSteps:["Entra a aistudio.google.com/apikey","Inicia sesión con tu cuenta de Google","Toca el botón \"Create API key\"","Copia la clave que aparece y pégala aquí"] },
   { id:"groq",       name:"Groq · Llama 3.3", emoji:"⚡", tag:"GRATIS · Ultra rápido",       tagColor:"#1FA86B", keyPrefix:"gsk_",    keyPlaceholder:"gsk_…",                       helpUrl:"https://console.groq.com/keys",     helpSteps:["Entra a console.groq.com y crea cuenta gratis","Ve a \"API Keys\" → \"Create API Key\"","Copia la clave (gsk_…)"] },
-  { id:"openrouter", name:"OpenRouter",        emoji:"🌐", tag:"GRATIS · Qwen, DeepSeek…",   tagColor:"#1FA86B", keyPrefix:"sk-or-",  keyPlaceholder:"sk-or-…",                     helpUrl:"https://openrouter.ai/keys",        helpSteps:["Entra a openrouter.ai y crea cuenta","Ve a \"Keys\" → \"Create Key\"","Copia la clave (sk-or-…)","Accede gratis a Qwen, DeepSeek, Llama 3.3 y más"] },
+  { id:"openrouter", name:"OpenRouter",        emoji:"🌐", tag:"GRATIS · Qwen, DeepSeek…",   tagColor:"#1FA86B", keyPrefix:"sk-or-",  keyPlaceholder:"sk-or-…",                     helpUrl:"https://openrouter.ai/keys",        helpSteps:["Entra a openrouter.ai y crea cuenta","Ve a \"Keys\" → \"Create Key\" y copia la clave (sk-or-…)","IMPORTANTE: en openrouter.ai/settings/privacy activa \"Enable free endpoints\" para usar modelos gratis","Fluido usa automáticamente solo modelos :free (Qwen, DeepSeek, Llama) — no necesitas elegir nada más"] },
   { id:"deepseek",   name:"DeepSeek",          emoji:"🐋", tag:"MUY BARATO · Modelo chino",  tagColor:"#2D6CDF", keyPrefix:"sk-",     keyPlaceholder:"sk-…",                        helpUrl:"https://platform.deepseek.com/api_keys", helpSteps:["Entra a platform.deepseek.com y crea cuenta","Ve a \"API Keys\" y crea una","Copia la clave (sk-…)"] },
   { id:"anthropic",  name:"Claude · Anthropic",emoji:"🤖", tag:"DE PAGO · Requiere créditos",tagColor:"#F25C4D", keyPrefix:"sk-ant",  keyPlaceholder:"sk-ant-api03-…",             helpUrl:"https://console.anthropic.com/",    helpSteps:["Entra a console.anthropic.com","Compra créditos ($5 USD mínimo)","Ve a \"API Keys\" y crea una","Copia la clave (sk-ant-…)"] },
 ];
@@ -190,6 +190,7 @@ async function callOpenAICompat(baseUrl,key,models,sys,prompt,extraH={}) {
     const data=await res.json();
     if(data.error){
       const msg=String(data.error.message||data.error.code||data.error);
+      if(/no endpoints.*data policy|data policy/i.test(msg)){lastErr=new Error(msg);lastErr.userMsg="OpenRouter bloquea los modelos gratis por tu configuración de privacidad. Ve a openrouter.ai/settings/privacy y activa \"Enable free endpoints\" (permitir endpoints gratuitos). Luego intenta de nuevo.";continue;}
       if(/not found|deprecated|does not exist|no endpoints/i.test(msg)){lastErr=new Error(msg);continue;}
       const e=new Error(msg); e.code="API";
       if(res.status===401||/invalid.*key|unauthorized/i.test(msg.toLowerCase())){e.code="BAD_KEY";e.userMsg=`Clave inválida. Revisa que la copiaste completa.`;}
@@ -200,7 +201,7 @@ async function callOpenAICompat(baseUrl,key,models,sys,prompt,extraH={}) {
     }
     return JSON.parse(cleanJSON(data.choices?.[0]?.message?.content||"{}"));
   }
-  const e=lastErr||new Error("Sin modelos disponibles"); e.code="API"; e.userMsg="Ningún modelo respondió. Intenta más tarde."; throw e;
+  const e=lastErr||new Error("Sin modelos disponibles"); e.code="API"; if(!e.userMsg) e.userMsg="Ningún modelo respondió. Intenta más tarde."; throw e;
 }
 async function callAnthropic(key,sys,prompt) {
   const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",
@@ -334,7 +335,7 @@ function App(){
       <div style={{flex:1,width:"100%",maxWidth:560,margin:"0 auto",padding:"20px 16px 96px"}}>
         {tab==="home"     && <Home     state={state} save={save} go={setTab}/>}
         {tab==="talk"     && <Talk     state={state} registerActivity={registerActivity}/>}
-        {tab==="phrases"  && <Phrases  state={state} save={save} registerActivity={registerActivity}/>}
+        {(tab==="phrases"||tab==="grammar") && <Phrases key={tab} initialMode={tab==="grammar"?"grammar":"cards"} state={state} save={save} registerActivity={registerActivity}/>}
         {tab==="listen"   && <Listen   state={state} save={save} registerActivity={registerActivity}/>}
         {tab==="settings" && <Settings state={state} save={save} onAIChanged={handleAIChanged} onThemeChange={handleThemeChange}/>}
       </div>
@@ -542,7 +543,7 @@ function TabBar({tab,setTab}){
       <div style={{display:"flex",width:"100%",maxWidth:560}}>
         {items.map(it=>(
           <button key={it.id} onClick={()=>setTab(it.id)} aria-label={it.label}
-            style={{flex:1,padding:"10px 4px 14px",border:"none",background:"transparent",color:tab===it.id?C.blue:C.inkSoft,fontWeight:tab===it.id?600:400,fontSize:11,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+            style={{flex:1,padding:"10px 4px 14px",border:"none",background:"transparent",color:(tab===it.id||(it.id==="phrases"&&tab==="grammar"))?C.blue:C.inkSoft,fontWeight:(tab===it.id||(it.id==="phrases"&&tab==="grammar"))?600:400,fontSize:11,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
             <span style={{fontSize:19,lineHeight:1}}>{it.icon}</span>{it.label}
           </button>))}
       </div>
@@ -739,8 +740,8 @@ function Feedback({fb}){
 // ============================================================
 // FRASES
 // ============================================================
-function Phrases({state,save,registerActivity}){
-  const [mode,setMode]=useState('cards');
+function Phrases({state,save,registerActivity,initialMode}){
+  const [mode,setMode]=useState(initialMode||'cards');
   const [flipped,setFlipped]=useState(false);
   const [generating,setGenerating]=useState(false);
   const [error,setError]=useState(null);
