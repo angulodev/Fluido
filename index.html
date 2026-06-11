@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fluido — Entrenador diario de inglés</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&family=Newsreader:ital,wght@0,400;0,500;0,600;1,400&display=swap" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #F7F9FB; }
+  button { font-family: 'Lexend', system-ui, sans-serif; cursor: pointer; }
+  textarea, input, select { font-family: 'Lexend', system-ui, sans-serif; }
+  .hl { background: linear-gradient(transparent 55%, #FFE34D 55%); padding: 0 2px; }
+  .hl-red { background: linear-gradient(transparent 55%, #FDEDEA 0%); text-decoration: line-through; text-decoration-color: #F25C4D; padding: 0 2px; }
+  .hl-green { background: linear-gradient(transparent 55%, #E7F7EF 0%); padding: 0 2px; font-weight: 600; }
+  .fadein { animation: fadein .35s ease; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .fadein { animation: none; } }
+  button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 3px solid #2D6CDF; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ============================================================
+// FLUIDO standalone — funciona en cualquier navegador
+// IA: Google Gemini (gratis) o Anthropic Claude (con créditos)
+// ============================================================
+
+const C = {
+  paper: "#F7F9FB", card: "#FFFFFF", ink: "#13243B", inkSoft: "#5A6B82",
+  line: "#E3E9F0", blue: "#2D6CDF", blueSoft: "#EAF1FD", marker: "#FFE34D",
+  green: "#1FA86B", greenSoft: "#E7F7EF", coral: "#F25C4D", coralSoft: "#FDEDEA",
+};
+const FONT_UI = "'Lexend', system-ui, sans-serif";
+const FONT_EN = "'Newsreader', Georgia, serif";
+
+const LEVELS = [
+  { id: "A2", label: "Básico", desc: "Frases cortas y simples" },
+  { id: "B1", label: "Intermedio", desc: "Conversación de trabajo" },
+  { id: "B2", label: "Avanzado", desc: "Reuniones y entrevistas" },
+];
+const GOAL_OPTIONS = ["Entrevistas de trabajo", "Reuniones y daily standups", "Emails y chat", "Viajes", "Conversación casual"];
+const INTEREST_OPTIONS = ["Tecnología / software", "Negocios", "Gaming", "Deportes", "Cine y series", "Música", "Cocina", "Mascotas", "Naturaleza"];
+
+const STARTER_DECK = [
+  { es: "¿Puedes repetir eso, por favor?", en: "Could you say that again, please?", note: "Tu salvavidas #1 en reuniones." },
+  { es: "Déjame verificarlo y te confirmo.", en: "Let me check and get back to you.", note: "'Get back to you' = te respondo después." },
+  { es: "Tiene sentido para mí.", en: "That makes sense to me.", note: "Muy usada para mostrar acuerdo." },
+  { es: "Estoy trabajando en eso ahora mismo.", en: "I'm working on that right now.", note: "Presente continuo para acciones en curso." },
+  { es: "Lo tendré listo para el viernes.", en: "I'll have it ready by Friday.", note: "'By Friday' = a más tardar el viernes." },
+  { es: "No estoy seguro, pero puedo averiguarlo.", en: "I'm not sure, but I can find out.", note: "Honesto y profesional a la vez." },
+  { es: "El error ocurre cuando el usuario envía el formulario.", en: "The error happens when the user submits the form.", note: "'Submit' = enviar un formulario." },
+  { es: "¿Cuál es la prioridad de esta tarea?", en: "What's the priority of this task?", note: "Pregunta clave en daily standups." },
+  { es: "Comparto mi pantalla.", en: "Let me share my screen.", note: "'Let me...' suaviza la acción." },
+  { es: "¿Te parece bien si lo revisamos mañana?", en: "Does it work for you if we review it tomorrow?", note: "'Does it work for you' = ¿te acomoda?" },
+  { es: "Tengo una pregunta sobre el requerimiento.", en: "I have a question about the requirement.", note: "Simple y directa. Úsala sin miedo." },
+  { es: "Gracias por tu tiempo, hablamos pronto.", en: "Thanks for your time, talk soon.", note: "Cierre natural de una llamada." },
+];
+
+// ---------- Utilidades ----------
+const pad = (n) => String(n).padStart(2, "0");
+const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
+const yesterdayStr = () => { const d = new Date(Date.now() - 86400000); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
+
+function cleanJSON(text) {
+  let t = (text || "").replace(/```json|```/g, "").trim();
+  const o = t.indexOf("{"); const a = t.indexOf("[");
+  if (a !== -1 && (a < o || o === -1)) return t.slice(a, t.lastIndexOf("]") + 1);
+  if (o !== -1) return t.slice(o, t.lastIndexOf("}") + 1);
+  return t;
+}
+
+// ---------- Config de IA (clave del usuario, guardada localmente) ----------
+function getAIConfig() {
+  try { return JSON.parse(localStorage.getItem("fluido-ai") || "null"); } catch (e) { return null; }
+}
+function setAIConfig(cfg) { localStorage.setItem("fluido-ai", JSON.stringify(cfg)); }
+
+async function askAI_JSON(userPrompt, system) {
+  const cfg = getAIConfig();
+  if (!cfg || !cfg.key) { const e = new Error("NO_KEY"); e.code = "NO_KEY"; throw e; }
+  const sys = (system || "") + "\nIMPORTANTE: Responde ÚNICAMENTE con JSON válido. Sin texto antes ni después, sin backticks de Markdown.";
+
+  if (cfg.provider === "anthropic") {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": cfg.key,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        system: sys,
+        messages: [{ role: "user", content: userPrompt }],
+      }),
+    });
+    const data = await res.json();
+    if (data.error) { const e = new Error(data.error.message || "Error de Anthropic"); e.code = res.status === 401 ? "BAD_KEY" : "API"; throw e; }
+    const text = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
+    return JSON.parse(cleanJSON(text));
+  }
+
+  // Gemini (por defecto)
+  const model = "gemini-2.0-flash";
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cfg.key)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: sys }] },
+        contents: [{ parts: [{ text: userPrompt }] }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0.9 },
+      }),
+    }
+  );
+  const data = await res.json();
+  if (data.error) { const e = new Error(data.error.message || "Error de Gemini"); e.code = (res.status === 400 || res.status === 401 || res.status === 403) ? "BAD_KEY" : "API"; throw e; }
+  const text = data.candidates && data.candidates[0] && data.candidates[0].content
+    ? data.candidates[0].content.parts.map((p) => p.text || "").join("\n") : "";
+  return JSON.parse(cleanJSON(text));
+}
+
+// ---------- Banco local de contenido (ahorra llamadas a la IA) ----------
+function loadBank() {
+  try { return JSON.parse(localStorage.getItem("fluido-bank") || "null") || { phrases: [], listening: [] }; }
+  catch (e) { return { phrases: [], listening: [] }; }
+}
+function saveBank(bank) {
+  try {
+    localStorage.setItem("fluido-bank", JSON.stringify({ phrases: bank.phrases.slice(-300), listening: bank.listening.slice(-150) }));
+  } catch (e) {}
+}
+
+// ---------- Estado ----------
+const DEFAULT_STATE = {
+  profile: null, level: "B1", streak: 0, lastActive: null,
+  totals: { talk: 0, phrases: 0, listen: 0 },
+  daily: { date: null, talk: 0, phrases: 0, listen: 0 },
+  usedListening: [],
+  deck: STARTER_DECK.map((p, i) => ({ id: "p" + i, ...p, interval: 0, due: 0, seen: 0 })),
+};
+function loadState() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem("fluido-state") || "null"); } catch (e) {}
+  s = s ? { ...DEFAULT_STATE, ...s } : { ...DEFAULT_STATE };
+  if (!s.daily || s.daily.date !== todayStr()) s.daily = { date: todayStr(), talk: 0, phrases: 0, listen: 0 };
+  if (!s.usedListening) s.usedListening = [];
+  return s;
+}
+function persist(s) { try { localStorage.setItem("fluido-state", JSON.stringify(s)); } catch (e) {} }
+
+// ---------- Voz (TTS) ----------
+function useSpeech() {
+  const [voices, setVoices] = useState([]);
+  const supported = typeof window !== "undefined" && "speechSynthesis" in window;
+  const [failed, setFailed] = useState(!supported);
+
+  useEffect(() => {
+    if (!supported) return;
+    const load = () => {
+      const v = window.speechSynthesis.getVoices().filter((v) => v.lang && v.lang.toLowerCase().startsWith("en"));
+      if (v.length) setVoices(v);
+    };
+    load();
+    window.speechSynthesis.onvoiceschanged = load;
+    const t1 = setTimeout(load, 500); const t2 = setTimeout(load, 2000);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [supported]);
+
+  const speak = useCallback((lines, opts) => {
+    const { rate = 0.9, onEnd } = opts || {};
+    if (!supported) { setFailed(true); onEnd && onEnd(); return; }
+    const synth = window.speechSynthesis;
+    try {
+      synth.cancel(); synth.resume();
+      const arr = Array.isArray(lines) ? lines : [{ line: lines }];
+      arr.forEach((d, i) => {
+        const u = new SpeechSynthesisUtterance(d.line || d);
+        u.lang = "en-US"; u.rate = rate;
+        if (voices.length) u.voice = voices[i % Math.min(2, voices.length)];
+        if (i === arr.length - 1 && onEnd) u.onend = onEnd;
+        synth.speak(u);
+      });
+      setTimeout(() => {
+        if (!synth.speaking && !synth.pending) { setFailed(true); onEnd && onEnd(); }
+        else setFailed(false);
+      }, 1200);
+    } catch (e) { setFailed(true); onEnd && onEnd(); }
+  }, [supported, voices]);
+
+  const stop = useCallback(() => { try { window.speechSynthesis.cancel(); } catch (e) {} }, []);
+  return { speak, stop, failed, supported };
+}
+
+function AudioWarning() {
+  return (
+    <div style={{ background: "#FFF8E1", border: "1px solid #E8C84A", borderRadius: 12, padding: "10px 12px", fontSize: 13, color: "#7A6310", marginTop: 10 }}>
+      🔇 <strong>No se reproduce el audio.</strong> Revisa el volumen y el modo silencio. En navegadores de escritorio y Chrome/Safari móvil debería funcionar.
+    </div>
+  );
+}
+
+// ============================================================
+// App raíz
+// ============================================================
+function App() {
+  const [state, setState] = useState(loadState);
+  const [tab, setTab] = useState("home");
+  const [aiReady, setAiReady] = useState(() => { const c = getAIConfig(); return !!(c && c.key); });
+
+  const save = useCallback((next) => { setState(next); persist(next); }, []);
+
+  const registerActivity = useCallback((block, extra) => {
+    setState((prev) => {
+      const next = { ...prev, ...(extra || {}) };
+      const today = todayStr();
+      next.daily = next.daily.date !== today ? { date: today, talk: 0, phrases: 0, listen: 0 } : { ...next.daily };
+      next.daily[block] += 1;
+      next.totals = { ...next.totals, [block]: next.totals[block] + 1 };
+      if (next.lastActive !== today) {
+        next.streak = next.lastActive === yesterdayStr() ? next.streak + 1 : 1;
+        next.lastActive = today;
+      }
+      persist(next);
+      return next;
+    });
+  }, []);
+
+  if (!aiReady) {
+    return <Shell><Setup onDone={() => setAiReady(true)} /></Shell>;
+  }
+  if (!state.profile) {
+    return <Shell><Onboarding onDone={(profile) => save({ ...state, profile, level: profile.level })} /></Shell>;
+  }
+  return (
+    <div style={{ minHeight: "100vh", background: C.paper, fontFamily: FONT_UI, color: C.ink, display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, width: "100%", maxWidth: 560, margin: "0 auto", padding: "20px 16px 96px" }}>
+        {tab === "home" && <Home state={state} save={save} go={setTab} />}
+        {tab === "talk" && <Talk state={state} registerActivity={registerActivity} />}
+        {tab === "phrases" && <Phrases state={state} save={save} registerActivity={registerActivity} />}
+        {tab === "listen" && <Listen state={state} save={save} registerActivity={registerActivity} />}
+        {tab === "settings" && <Settings state={state} save={save} onAIChanged={() => setAiReady(!!(getAIConfig() || {}).key)} />}
+      </div>
+      <TabBar tab={tab} setTab={setTab} />
+    </div>
+  );
+}
+
+function Shell({ children }) {
+  return (
+    <div style={{ minHeight: "100vh", background: C.paper, fontFamily: FONT_UI, color: C.ink }}>
+      <div style={{ width: "100%", maxWidth: 560, margin: "0 auto", padding: "24px 16px 40px" }}>{children}</div>
+    </div>
+  );
+}
+
+// ============================================================
+// SETUP — conectar la IA (primera vez)
+// ============================================================
+function Setup({ onDone }) {
+  const cfg = getAIConfig() || { provider: "gemini", key: "" };
+  const [provider, setProvider] = useState(cfg.provider);
+  const [key, setKey] = useState(cfg.key || "");
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const test = async () => {
+    setTesting(true); setError(null);
+    setAIConfig({ provider, key: key.trim() });
+    try {
+      await askAI_JSON('Devuelve exactamente este JSON: {"ok": true}', "Eres un verificador.");
+      onDone();
+    } catch (e) {
+      setError(e.code === "BAD_KEY"
+        ? "La clave no es válida. Revisa que la copiaste completa."
+        : "No pude conectar. Revisa tu internet y la clave, e intenta de nuevo.");
+    }
+    setTesting(false);
+  };
+
+  return (
+    <div className="fadein">
+      <h1 style={{ fontSize: 32, fontWeight: 700, margin: "8px 0 4px" }}>Fluido<span style={{ color: C.blue }}>.</span></h1>
+      <p style={{ fontFamily: FONT_EN, fontStyle: "italic", fontSize: 17, color: C.inkSoft, marginBottom: 20 }}>
+        Tu entrenador diario de inglés, <span className="hl">impulsado por IA</span>.
+      </p>
+
+      <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 16, padding: 18 }}>
+        <p style={{ fontWeight: 600, marginBottom: 10 }}>Paso 1 · Conecta una IA</p>
+        <p style={{ fontSize: 14, color: C.inkSoft, marginBottom: 14, lineHeight: 1.5 }}>
+          Fluido usa IA para crear tus ejercicios. Necesitas una clave (API key). Tu clave se guarda <strong>solo en este navegador</strong>, nunca se envía a otro lugar.
+        </p>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <button onClick={() => setProvider("gemini")}
+            style={{ flex: 1, padding: "12px 8px", borderRadius: 12, border: `2px solid ${provider === "gemini" ? C.blue : C.line}`, background: provider === "gemini" ? C.blueSoft : "transparent", textAlign: "left" }}>
+            <strong style={{ color: provider === "gemini" ? C.blue : C.ink, fontSize: 14 }}>Google Gemini</strong>
+            <div style={{ fontSize: 11, color: C.green, fontWeight: 600 }}>GRATIS · Recomendado</div>
+          </button>
+          <button onClick={() => setProvider("anthropic")}
+            style={{ flex: 1, padding: "12px 8px", borderRadius: 12, border: `2px solid ${provider === "anthropic" ? C.blue : C.line}`, background: provider === "anthropic" ? C.blueSoft : "transparent", textAlign: "left" }}>
+            <strong style={{ color: provider === "anthropic" ? C.blue : C.ink, fontSize: 14 }}>Claude (Anthropic)</strong>
+            <div style={{ fontSize: 11, color: C.inkSoft }}>Requiere créditos</div>
+          </button>
+        </div>
+
+        {provider === "gemini" ? (
+          <div style={{ background: C.paper, borderRadius: 12, padding: 12, fontSize: 13, lineHeight: 1.7, marginBottom: 14 }}>
+            <strong>Cómo obtener tu clave gratis (2 minutos):</strong><br />
+            1. Entra a <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: C.blue }}>aistudio.google.com/apikey</a><br />
+            2. Inicia sesión con tu cuenta de Google<br />
+            3. Toca <strong>"Create API key"</strong> y cópiala<br />
+            4. Pégala aquí abajo 👇
+          </div>
+        ) : (
+          <div style={{ background: C.paper, borderRadius: 12, padding: 12, fontSize: 13, lineHeight: 1.7, marginBottom: 14 }}>
+            <strong>Cómo obtener tu clave:</strong><br />
+            1. Entra a <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer" style={{ color: C.blue }}>console.anthropic.com</a><br />
+            2. Crea una API key en <strong>API Keys</strong> (requiere créditos de pago)<br />
+            3. Pégala aquí abajo 👇
+          </div>
+        )}
+
+        <input
+          type="password"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          placeholder={provider === "gemini" ? "AIza…" : "sk-ant-…"}
+          style={{ width: "100%", padding: "14px 16px", fontSize: 15, borderRadius: 12, border: `1.5px solid ${C.line}`, outline: "none" }}
+        />
+        {error && <p style={{ color: C.coral, fontSize: 14, marginTop: 10 }}>{error}</p>}
+        <button onClick={test} disabled={!key.trim() || testing}
+          style={{ width: "100%", marginTop: 14, padding: "14px 18px", borderRadius: 14, border: "none", background: C.blue, color: "#fff", fontWeight: 600, fontSize: 16, opacity: !key.trim() || testing ? 0.5 : 1 }}>
+          {testing ? "Probando conexión…" : "Conectar y continuar"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// ONBOARDING
+// ============================================================
+function Onboarding({ onDone }) {
+  const [step, setStep] = useState(0);
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("");
+  const [goals, setGoals] = useState([]);
+  const [interests, setInterests] = useState([]);
+  const [level, setLevel] = useState(null);
+  const toggle = (list, setList, item) => setList(list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
+
+  const inputStyle = { width: "100%", marginTop: 8, padding: "14px 16px", fontSize: 16, borderRadius: 14, border: `1.5px solid ${C.line}`, background: C.card, outline: "none" };
+
+  const steps = [
+    { title: "¡Hola! 👋", sub: "Quiero conocerte para que cada ejercicio sea sobre TU mundo.",
+      content: (<div><label style={{ fontSize: 14, color: C.inkSoft }}>¿Cómo te llamas?</label>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tu nombre" style={inputStyle} /></div>),
+      valid: name.trim().length > 0 },
+    { title: `Un gusto, ${name.trim()} ✨`, sub: "Esto me ayuda a crear situaciones realistas para ti.",
+      content: (<div><label style={{ fontSize: 14, color: C.inkSoft }}>¿A qué te dedicas? (trabajo o estudio)</label>
+        <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Ej: consultor de software, estudiante, vendedora…" style={inputStyle} /></div>),
+      valid: role.trim().length > 1 },
+    { title: "¿Para qué necesitas el inglés?", sub: "Elige todo lo que aplique.",
+      content: <ChipGrid options={GOAL_OPTIONS} selected={goals} onToggle={(o) => toggle(goals, setGoals, o)} />, valid: goals.length > 0 },
+    { title: "¿Qué temas te gustan?", sub: "Usaré tus intereses en los diálogos para que no sea aburrido.",
+      content: <ChipGrid options={INTEREST_OPTIONS} selected={interests} onToggle={(o) => toggle(interests, setInterests, o)} />, valid: interests.length > 0 },
+    { title: "Última: tu nivel actual", sub: "Sé honesto — siempre puedes cambiarlo después.",
+      content: (<div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {LEVELS.map((lv) => (
+          <button key={lv.id} onClick={() => setLevel(lv.id)}
+            style={{ padding: "14px 16px", borderRadius: 14, textAlign: "left", border: `2px solid ${level === lv.id ? C.blue : C.line}`, background: level === lv.id ? C.blueSoft : C.card }}>
+            <strong style={{ color: level === lv.id ? C.blue : C.ink }}>{lv.label}</strong>
+            <div style={{ fontSize: 13, color: C.inkSoft, marginTop: 2 }}>{lv.desc}</div>
+          </button>))}
+      </div>), valid: !!level },
+  ];
+
+  const s = steps[step];
+  const last = step === steps.length - 1;
+  return (
+    <div className="fadein" key={step}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 24 }}>
+        {steps.map((_, i) => <div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? C.blue : C.line }} />)}
+      </div>
+      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 6 }}>{s.title}</h1>
+      <p style={{ fontSize: 15, color: C.inkSoft, marginBottom: 20, lineHeight: 1.5 }}>{s.sub}</p>
+      {s.content}
+      <div style={{ display: "flex", gap: 10, marginTop: 28 }}>
+        {step > 0 && (
+          <button onClick={() => setStep(step - 1)} style={{ padding: "14px 18px", borderRadius: 14, border: `1.5px solid ${C.line}`, background: C.card, color: C.inkSoft, fontWeight: 600 }}>Atrás</button>
+        )}
+        <button
+          onClick={() => { if (!s.valid) return; if (last) onDone({ name: name.trim(), role: role.trim(), goals, interests, level }); else setStep(step + 1); }}
+          disabled={!s.valid}
+          style={{ flex: 1, padding: "14px 18px", borderRadius: 14, border: "none", background: C.blue, color: "#fff", fontWeight: 600, fontSize: 16, opacity: s.valid ? 1 : 0.4 }}>
+          {last ? "¡Empezar a entrenar!" : "Siguiente"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ChipGrid({ options, selected, onToggle }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {options.map((o) => {
+        const on = selected.includes(o);
+        return (
+          <button key={o} onClick={() => onToggle(o)}
+            style={{ padding: "10px 14px", borderRadius: 999, fontSize: 14, fontWeight: 500, border: `1.5px solid ${on ? C.blue : C.line}`, background: on ? C.blueSoft : C.card, color: on ? C.blue : C.ink }}>
+            {on ? "✓ " : ""}{o}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function profileForPrompts(state, withName) {
+  const p = state.profile || {};
+  return `${withName && p.name ? `Nombre del estudiante: ${p.name}. ` : ""}Ocupación: ${p.role || "profesional"}. Objetivos con el inglés: ${(p.goals || []).join(", ")}. Temas de interés: ${(p.interests || []).join(", ")}. Nivel: ${state.level}.`;
+}
+
+// ============================================================
+// Navegación
+// ============================================================
+function TabBar({ tab, setTab }) {
+  const items = [
+    { id: "home", icon: "⌂", label: "Inicio" },
+    { id: "talk", icon: "✎", label: "Conversar" },
+    { id: "phrases", icon: "❏", label: "Frases" },
+    { id: "listen", icon: "♪", label: "Escuchar" },
+    { id: "settings", icon: "⚙", label: "Ajustes" },
+  ];
+  return (
+    <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: C.card, borderTop: `1px solid ${C.line}`, display: "flex", justifyContent: "center", zIndex: 50 }}>
+      <div style={{ display: "flex", width: "100%", maxWidth: 560 }}>
+        {items.map((it) => (
+          <button key={it.id} onClick={() => setTab(it.id)} aria-label={it.label}
+            style={{ flex: 1, padding: "10px 4px 14px", border: "none", background: "transparent", color: tab === it.id ? C.blue : C.inkSoft, fontWeight: tab === it.id ? 600 : 400, fontSize: 11, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+            <span style={{ fontSize: 19, lineHeight: 1 }}>{it.icon}</span>
+            {it.label}
+          </button>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
+// ============================================================
+// INICIO
+// ============================================================
+function Home({ state, save, go }) {
+  const d = state.daily;
+  const goals = [
+    { id: "talk", label: "Conversar", done: d.talk, target: 3, unit: "mensajes", desc: "Escribe en inglés en una situación real" },
+    { id: "phrases", label: "Frases", done: d.phrases, target: 5, unit: "tarjetas", desc: "Repasa tu mazo de frases útiles" },
+    { id: "listen", label: "Escuchar", done: d.listen, target: 1, unit: "audio", desc: "Entrena el oído con diálogos reales" },
+  ];
+  const allDone = goals.every((g) => g.done >= g.target);
+  return (
+    <div className="fadein">
+      <p style={{ fontSize: 13, color: C.inkSoft, letterSpacing: 1.5, textTransform: "uppercase" }}>Hola, {state.profile.name}</p>
+      <h1 style={{ margin: "4px 0 2px", fontSize: 34, fontWeight: 700, letterSpacing: -0.5 }}>Fluido<span style={{ color: C.blue }}>.</span></h1>
+      <p style={{ fontFamily: FONT_EN, fontStyle: "italic", fontSize: 17, color: C.inkSoft }}>
+        "You don't learn a language. <span className="hl">You get used to it.</span>"
+      </p>
+      <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+        <StatCard big={`${state.streak}`} label={state.streak === 1 ? "día seguido" : "días seguidos"} accent={C.blue} />
+        <StatCard big={`${state.totals.talk + state.totals.phrases + state.totals.listen}`} label="prácticas totales" accent={C.green} />
+      </div>
+      <div style={{ marginTop: 20 }}>
+        <p style={{ fontSize: 13, color: C.inkSoft, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Misiones de hoy</p>
+        {goals.map((g) => {
+          const pct = Math.min(100, Math.round((g.done / g.target) * 100));
+          const done = g.done >= g.target;
+          return (
+            <button key={g.id} onClick={() => go(g.id)}
+              style={{ width: "100%", textAlign: "left", background: C.card, border: `1px solid ${done ? C.green : C.line}`, borderRadius: 14, padding: 14, marginBottom: 10, display: "block" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontWeight: 600, fontSize: 16 }}>{done ? "✓ " : ""}{g.label}</span>
+                <span style={{ fontSize: 13, color: done ? C.green : C.inkSoft }}>{Math.min(g.done, g.target)}/{g.target} {g.unit}</span>
+              </div>
+              <p style={{ margin: "4px 0 8px", fontSize: 13, color: C.inkSoft }}>{g.desc}</p>
+              <div style={{ height: 6, background: C.paper, borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: pct + "%", background: done ? C.green : C.blue, borderRadius: 3, transition: "width .3s" }} />
+              </div>
+            </button>
+          );
+        })}
+        {allDone && (
+          <div className="fadein" style={{ background: C.greenSoft, border: `1px solid ${C.green}`, borderRadius: 14, padding: 14, textAlign: "center", fontWeight: 600, color: C.green }}>
+            ¡Misiones completas, {state.profile.name}! Nos vemos mañana 🔥
+          </div>
+        )}
+      </div>
+      <div style={{ marginTop: 22 }}>
+        <p style={{ fontSize: 13, color: C.inkSoft, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Tu nivel</p>
+        <div style={{ display: "flex", gap: 8 }}>
+          {LEVELS.map((lv) => (
+            <button key={lv.id} onClick={() => save({ ...state, level: lv.id })}
+              style={{ flex: 1, padding: "10px 6px", borderRadius: 12, border: `2px solid ${state.level === lv.id ? C.blue : C.line}`, background: state.level === lv.id ? C.blueSoft : C.card, color: state.level === lv.id ? C.blue : C.inkSoft, fontWeight: 600, fontSize: 14 }}>
+              {lv.label}
+              <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2 }}>{lv.desc}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ big, label, accent }) {
+  return (
+    <div style={{ flex: 1, background: C.card, border: `1px solid ${C.line}`, borderRadius: 14, padding: "14px 16px" }}>
+      <div style={{ fontSize: 30, fontWeight: 700, color: accent, lineHeight: 1 }}>{big}</div>
+      <div style={{ fontSize: 13, color: C.inkSoft, marginTop: 4 }}>{label}</div>
+    </div>
+  );
+}
+
+// ============================================================
+// CONVERSAR
+// ============================================================
+function Talk({ state, registerActivity }) {
+  const [scenario, setScenario] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const bottomRef = useRef(null);
+  const { speak, failed } = useSpeech();
+
+  useEffect(() => { bottomRef.current && bottomRef.current.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+
+  const newScenario = async () => {
+    setLoading(true); setError(null); setMessages([]); setScenario(null);
+    try {
+      const data = await askAI_JSON(
+        `Perfil del estudiante: ${profileForPrompts(state, true)}\n\nGenera una situación de práctica de inglés PERSONALIZADA: usa su ocupación, sus objetivos y a veces sus intereses (ej. small talk sobre un hobby). Varía el contexto cada vez (semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve JSON: {"title_es": "título corto en español", "context_es": "contexto en español, 1-2 frases, indicando quién es el estudiante en la escena y quién es el interlocutor", "opening_en": "primer mensaje del interlocutor en inglés, adecuado al nivel"}`,
+        "Eres un profesor de inglés que crea simulaciones realistas y motivantes."
+      );
+      setScenario(data);
+      setMessages([{ role: "them", text: data.opening_en }]);
+    } catch (e) {
+      setError(e.code === "NO_KEY" ? "Configura tu clave de IA en Ajustes." : "No pude generar la situación. Intenta de nuevo.");
+    }
+    setLoading(false);
+  };
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || loading) return;
+    setInput(""); setLoading(true); setError(null);
+    const myMsg = { role: "me", text };
+    setMessages((m) => [...m, myMsg]);
+    try {
+      const history = [...messages, myMsg].map((m) => (m.role === "them" ? "INTERLOCUTOR: " : "ESTUDIANTE: ") + m.text).join("\n");
+      const data = await askAI_JSON(
+        `Perfil: ${profileForPrompts(state, true)}\nSituación: ${scenario.context_es}\n\nConversación:\n${history}\n\nEl estudiante acaba de escribir su último mensaje en inglés. Tu tarea: 1) corrige errores si los hay, 2) da la versión natural, 3) continúa como el interlocutor.\n\nDevuelve JSON: {"errors": [{"wrong": "fragmento con error", "right": "corregido", "why_es": "explicación breve en español"}], "natural_en": "frase completa como la diría un nativo o null", "tip_es": "mini consejo en español (máx 15 palabras) o null", "reply_en": "respuesta del interlocutor en inglés que invite a seguir"}\n\nSi el mensaje está esencialmente bien: errors=[] y natural_en=null. Si escribió en español o mezclado: anímalo en tip_es y traduce en natural_en.`,
+        "Eres un coach de inglés cálido y preciso. Corriges sin desanimar."
+      );
+      setMessages((m) => {
+        const copy = [...m];
+        copy[copy.length - 1] = { ...myMsg, feedback: data };
+        return [...copy, { role: "them", text: data.reply_en }];
+      });
+      registerActivity("talk");
+    } catch (e) {
+      setError("Hubo un problema al enviar. Intenta de nuevo.");
+      setMessages((m) => m.slice(0, -1));
+      setInput(text);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="fadein" style={{ display: "flex", flexDirection: "column", minHeight: "calc(100vh - 140px)" }}>
+      <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Conversar</h2>
+      <p style={{ marginBottom: 14, fontSize: 14, color: C.inkSoft }}>
+        Escribe en inglés como puedas. Aquí <span className="hl">equivocarse es el método</span>.
+      </p>
+      {!scenario && !loading && (
+        <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 16, padding: 20, textAlign: "center" }}>
+          <p style={{ fontFamily: FONT_EN, fontSize: 18, marginBottom: 14 }}>Ready when you are, {state.profile.name}.</p>
+          <BigButton onClick={newScenario}>Nueva situación</BigButton>
+        </div>
+      )}
+      {scenario && (
+        <div style={{ background: C.blueSoft, borderRadius: 12, padding: "10px 14px", marginBottom: 12 }}>
+          <strong style={{ fontSize: 14 }}>{scenario.title_es}</strong>
+          <p style={{ margin: "2px 0 0", fontSize: 13, color: C.inkSoft }}>{scenario.context_es}</p>
+        </div>
+      )}
+      <div style={{ flex: 1 }}>
+        {messages.map((m, i) => (
+          <div key={i} className="fadein" style={{ marginBottom: 10 }}>
+            <div style={{ maxWidth: "85%", padding: "10px 14px", borderRadius: 14, fontSize: 16, lineHeight: 1.5, fontFamily: FONT_EN, background: m.role === "me" ? C.blue : C.card, color: m.role === "me" ? "#fff" : C.ink, border: m.role === "me" ? "none" : `1px solid ${C.line}`, marginLeft: m.role === "me" ? "auto" : 0 }}>
+              {m.text}
+              {m.role === "them" && (
+                <button onClick={() => speak(m.text)} aria-label="Escuchar" style={{ border: "none", background: "transparent", fontSize: 16, marginLeft: 6, cursor: "pointer" }}>🔊</button>
+              )}
+            </div>
+            {m.feedback && <Feedback fb={m.feedback} />}
+          </div>
+        ))}
+        {failed && <AudioWarning />}
+        {loading && <p style={{ color: C.inkSoft, fontSize: 14 }}>Pensando…</p>}
+        {error && <p style={{ color: C.coral, fontSize: 14 }}>{error}</p>}
+        <div ref={bottomRef} />
+      </div>
+      {scenario && (
+        <div style={{ position: "sticky", bottom: 80, marginTop: 10 }}>
+          <div style={{ display: "flex", gap: 8, background: C.card, border: `1px solid ${C.line}`, borderRadius: 16, padding: 8 }}>
+            <textarea value={input} onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+              placeholder="Write your reply in English…" rows={2}
+              style={{ flex: 1, border: "none", resize: "none", fontSize: 16, outline: "none", background: "transparent", fontFamily: FONT_EN }} />
+            <button onClick={send} disabled={loading || !input.trim()}
+              style={{ alignSelf: "flex-end", background: C.blue, color: "#fff", border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 600, opacity: loading || !input.trim() ? 0.5 : 1 }}>
+              Enviar
+            </button>
+          </div>
+          <button onClick={newScenario} style={{ marginTop: 8, background: "transparent", border: "none", color: C.inkSoft, fontSize: 13, textDecoration: "underline" }}>
+            Cambiar de situación
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Feedback({ fb }) {
+  const hasErrors = fb.errors && fb.errors.length > 0;
+  if (!hasErrors && !fb.natural_en && !fb.tip_es) {
+    return <div style={{ maxWidth: "85%", marginLeft: "auto", marginTop: 4, fontSize: 13, color: C.green, textAlign: "right" }}>✓ Perfecto, así se dice</div>;
+  }
+  return (
+    <div className="fadein" style={{ maxWidth: "92%", marginLeft: "auto", marginTop: 6, background: C.card, border: `1px dashed ${C.line}`, borderRadius: 12, padding: "10px 12px", fontSize: 14 }}>
+      {hasErrors && fb.errors.map((e, i) => (
+        <p key={i} style={{ margin: "0 0 6px", lineHeight: 1.6 }}>
+          <span className="hl-red" style={{ fontFamily: FONT_EN }}>{e.wrong}</span>{" → "}
+          <span className="hl-green" style={{ fontFamily: FONT_EN }}>{e.right}</span>
+          <br />
+          <span style={{ color: C.inkSoft, fontSize: 13 }}>{e.why_es}</span>
+        </p>
+      ))}
+      {fb.natural_en && (
+        <p style={{ margin: "6px 0 0", lineHeight: 1.5 }}>
+          <span style={{ fontSize: 12, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 1 }}>Versión natural</span><br />
+          <span className="hl" style={{ fontFamily: FONT_EN, fontSize: 15 }}>{fb.natural_en}</span>
+        </p>
+      )}
+      {fb.tip_es && <p style={{ margin: "8px 0 0", fontSize: 13, color: C.blue }}>💡 {fb.tip_es}</p>}
+    </div>
+  );
+}
+
+// ============================================================
+// FRASES
+// ============================================================
+function Phrases({ state, save, registerActivity }) {
+  const [flipped, setFlipped] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState(null);
+  const [info, setInfo] = useState(null);
+  const { speak, failed } = useSpeech();
+
+  const now = Date.now();
+  const due = state.deck.filter((c) => c.due <= now).sort((a, b) => a.due - b.due);
+  const card = due[0];
+
+  const grade = (g) => {
+    const deck = state.deck.map((c) => {
+      if (c.id !== card.id) return c;
+      let interval;
+      if (g === "again") interval = 0;
+      else if (g === "good") interval = Math.max(1, (c.interval || 0) * 2);
+      else interval = Math.max(3, (c.interval || 1) * 3);
+      const dueTs = g === "again" ? Date.now() + 10 * 60 * 1000 : Date.now() + interval * 86400000;
+      return { ...c, interval, due: dueTs, seen: c.seen + 1 };
+    });
+    setFlipped(false);
+    registerActivity("phrases", { deck });
+  };
+
+  const generateMore = async () => {
+    setGenerating(true); setError(null); setInfo(null);
+    try {
+      const have = new Set(state.deck.map((c) => c.en.toLowerCase().trim()));
+      const bank = loadBank();
+      const fromBank = bank.phrases.filter((p) => !have.has(p.en.toLowerCase().trim())).slice(0, 5);
+      let newPhrases = [...fromBank];
+      if (newPhrases.length < 5) {
+        const need = 5 - newPhrases.length;
+        const existing = state.deck.map((c) => c.en).slice(-40).join(" | ");
+        const arr = await askAI_JSON(
+          `Perfil del estudiante (sin nombre): ${profileForPrompts(state, false)}\n\nGenera ${need} frases nuevas de inglés útiles para este perfil (mezcla sus objetivos y, ocasionalmente, sus intereses). NO repitas: ${existing}\n\nDevuelve JSON array: [{"es": "frase en español", "en": "frase en inglés natural", "note_es": "nota breve y útil en español"}]`,
+          "Eres un profesor de inglés práctico."
+        );
+        const generated = arr.map((p) => ({ es: p.es, en: p.en, note_es: p.note_es || p.note || "" }));
+        newPhrases = [...newPhrases, ...generated];
+        bank.phrases = [...bank.phrases, ...generated];
+        saveBank(bank);
+      } else {
+        setInfo("♻️ Frases reutilizadas del banco local — cero llamadas a la IA.");
+      }
+      const newCards = newPhrases.slice(0, 5).map((p, i) => ({
+        id: "g" + Date.now() + i, es: p.es, en: p.en, note: p.note_es || p.note || "", interval: 0, due: 0, seen: 0,
+      }));
+      save({ ...state, deck: [...state.deck, ...newCards] });
+    } catch (e) {
+      setError(e.code === "NO_KEY" ? "Configura tu clave de IA en Ajustes." : "No pude conseguir frases nuevas. Intenta de nuevo.");
+    }
+    setGenerating(false);
+  };
+
+  return (
+    <div className="fadein">
+      <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Frases</h2>
+      <p style={{ marginBottom: 14, fontSize: 14, color: C.inkSoft }}>
+        Lee el español, <span className="hl">dilo en voz alta en inglés</span>, y recién ahí voltea la tarjeta.
+      </p>
+      <div style={{ display: "flex", gap: 10, marginBottom: 14, fontSize: 13, color: C.inkSoft }}>
+        <span>📚 {state.deck.length} en tu mazo</span>
+        <span>⏰ {due.length} por repasar</span>
+      </div>
+      {card ? (
+        <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 18, padding: 22, minHeight: 220, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+          <div>
+            <p style={{ fontSize: 12, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 1.5 }}>
+              {flipped ? "En inglés se dice" : "¿Cómo dirías…?"}
+            </p>
+            <p style={{ fontSize: 21, fontWeight: 500, margin: "10px 0", lineHeight: 1.4 }}>{card.es}</p>
+            {flipped && (
+              <div className="fadein">
+                <p style={{ fontFamily: FONT_EN, fontSize: 23, margin: "6px 0", lineHeight: 1.4 }}>
+                  <span className="hl">{card.en}</span>{" "}
+                  <button onClick={() => speak(card.en)} aria-label="Escuchar pronunciación" style={{ border: "none", background: "transparent", fontSize: 20 }}>🔊</button>
+                </p>
+                <p style={{ fontSize: 13, color: C.inkSoft, margin: "8px 0 0" }}>{card.note}</p>
+                {failed && <AudioWarning />}
+              </div>
+            )}
+          </div>
+          {!flipped ? (
+            <BigButton onClick={() => { setFlipped(true); speak(card.en); }}>Mostrar respuesta</BigButton>
+          ) : (
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <GradeBtn color={C.coral} bg={C.coralSoft} onClick={() => grade("again")} label="Otra vez" sub="en 10 min" />
+              <GradeBtn color={C.blue} bg={C.blueSoft} onClick={() => grade("good")} label="Bien" sub={`en ${Math.max(1, (card.interval || 0) * 2)} día(s)`} />
+              <GradeBtn color={C.green} bg={C.greenSoft} onClick={() => grade("easy")} label="Fácil" sub={`en ${Math.max(3, (card.interval || 1) * 3)} días`} />
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ background: C.greenSoft, border: `1px solid ${C.green}`, borderRadius: 18, padding: 22, textAlign: "center" }}>
+          <p style={{ fontWeight: 600, color: C.green, marginBottom: 4 }}>✓ Mazo al día</p>
+          <p style={{ fontSize: 14, color: C.inkSoft }}>No hay tarjetas pendientes ahora. Agrega frases nuevas o vuelve más tarde.</p>
+        </div>
+      )}
+      <button onClick={generateMore} disabled={generating}
+        style={{ width: "100%", marginTop: 14, padding: 14, borderRadius: 14, border: `2px dashed ${C.blue}`, background: "transparent", color: C.blue, fontWeight: 600, fontSize: 15, opacity: generating ? 0.6 : 1 }}>
+        {generating ? "Buscando…" : "✨ Agregar 5 frases nuevas"}
+      </button>
+      {info && <p style={{ color: C.green, fontSize: 13, marginTop: 8 }}>{info}</p>}
+      {error && <p style={{ color: C.coral, fontSize: 14 }}>{error}</p>}
+    </div>
+  );
+}
+
+function GradeBtn({ color, bg, onClick, label, sub }) {
+  return (
+    <button onClick={onClick} style={{ flex: 1, padding: "10px 4px", borderRadius: 12, border: `1.5px solid ${color}`, background: bg, color, fontWeight: 600, fontSize: 14 }}>
+      {label}
+      <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2, opacity: 0.8 }}>{sub}</div>
+    </button>
+  );
+}
+
+// ============================================================
+// ESCUCHAR
+// ============================================================
+function Listen({ state, save, registerActivity }) {
+  const [exercise, setExercise] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [info, setInfo] = useState(null);
+  const [picked, setPicked] = useState(null);
+  const [revealed, setRevealed] = useState(false);
+  const [readingMode, setReadingMode] = useState(false);
+  const [rate, setRate] = useState(0.85);
+  const [playing, setPlaying] = useState(false);
+  const { speak, stop, failed, supported } = useSpeech();
+
+  useEffect(() => () => stop(), [stop]);
+  useEffect(() => { if (failed) setReadingMode(true); }, [failed]);
+
+  const newExercise = async () => {
+    setLoading(true); setError(null); setInfo(null);
+    setExercise(null); setPicked(null); setRevealed(false);
+    stop(); setPlaying(false);
+    try {
+      const bank = loadBank();
+      const used = new Set(state.usedListening || []);
+      const candidates = bank.listening.filter((e) => e.id && !used.has(e.id) && e.level === state.level);
+      if (candidates.length > 0) {
+        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+        setExercise(pick);
+        save({ ...state, usedListening: [...(state.usedListening || []), pick.id].slice(-300) });
+        setInfo("♻️ Audio del banco local — cero llamadas a la IA.");
+        setLoading(false);
+        return;
+      }
+      const data = await askAI_JSON(
+        `Perfil del estudiante (sin nombre): ${profileForPrompts(state, false)}\n\nGenera un ejercicio de listening en inglés para este perfil: diálogo corto (4-6 líneas) entre dos personas, sobre uno de sus objetivos o intereses (varía el tema, semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve JSON: {"title_es": "título en español", "dialogue": [{"speaker": "nombre", "line": "frase en inglés"}], "question_es": "pregunta de comprensión en español", "options_es": ["opción A en español", "opción B", "opción C"], "correct_index": 0, "key_phrase_en": "expresión útil del diálogo", "key_phrase_es": "su traducción"}`,
+        "Eres un profesor de inglés que crea ejercicios de listening realistas y naturales."
+      );
+      data.id = "L" + Date.now() + Math.random().toString(36).slice(2, 6);
+      data.level = state.level;
+      setExercise(data);
+      const bank2 = loadBank();
+      bank2.listening = [...bank2.listening, data];
+      saveBank(bank2);
+      save({ ...state, usedListening: [...(state.usedListening || []), data.id].slice(-300) });
+    } catch (e) {
+      setError(e.code === "NO_KEY" ? "Configura tu clave de IA en Ajustes." : "No pude conseguir el ejercicio. Intenta de nuevo.");
+    }
+    setLoading(false);
+  };
+
+  const play = () => {
+    if (!exercise) return;
+    setPlaying(true);
+    speak(exercise.dialogue, { rate, onEnd: () => setPlaying(false) });
+  };
+  const stopAll = () => { stop(); setPlaying(false); };
+  const answer = (i) => { if (picked !== null) return; setPicked(i); registerActivity("listen"); };
+
+  return (
+    <div className="fadein">
+      <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Escuchar</h2>
+      <p style={{ marginBottom: 14, fontSize: 14, color: C.inkSoft }}>
+        Escucha primero <span className="hl">sin leer</span>. La transcripción se revela al final.
+      </p>
+      {!exercise && !loading && (
+        <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 16, padding: 20, textAlign: "center" }}>
+          <p style={{ fontFamily: FONT_EN, fontSize: 18, marginBottom: 14 }}>Train your ear.</p>
+          <BigButton onClick={newExercise}>Nuevo audio</BigButton>
+        </div>
+      )}
+      {loading && <p style={{ color: C.inkSoft }}>Preparando el ejercicio…</p>}
+      {error && <p style={{ color: C.coral }}>{error}</p>}
+      {info && <p style={{ color: C.green, fontSize: 13 }}>{info}</p>}
+
+      {exercise && (
+        <div>
+          <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 16, padding: 18 }}>
+            <strong>{exercise.title_es}</strong>
+            {!readingMode ? (
+              <React.Fragment>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
+                  <button onClick={playing ? stopAll : play}
+                    style={{ width: 56, height: 56, borderRadius: "50%", border: "none", background: C.blue, color: "#fff", fontSize: 22 }}
+                    aria-label={playing ? "Detener" : "Reproducir"}>
+                    {playing ? "■" : "▶"}
+                  </button>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 13, color: C.inkSoft }}>Velocidad</p>
+                    <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                      {[{ v: 0.7, l: "Lenta" }, { v: 0.85, l: "Normal" }, { v: 1.0, l: "Nativa" }].map((o) => (
+                        <button key={o.v} onClick={() => setRate(o.v)}
+                          style={{ padding: "4px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: `1.5px solid ${rate === o.v ? C.blue : C.line}`, background: rate === o.v ? C.blueSoft : "transparent", color: rate === o.v ? C.blue : C.inkSoft }}>
+                          {o.l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+                  <p style={{ fontSize: 12, color: C.inkSoft }}>Escúchalo las veces que necesites.</p>
+                  <button onClick={() => setReadingMode(true)} style={{ border: "none", background: "transparent", color: C.inkSoft, fontSize: 12, textDecoration: "underline" }}>
+                    ¿No escuchas nada?
+                  </button>
+                </div>
+                {failed && <AudioWarning />}
+              </React.Fragment>
+            ) : (
+              <div style={{ marginTop: 12 }}>
+                {failed && <AudioWarning />}
+                <p style={{ fontSize: 13, color: C.inkSoft, margin: "10px 0 8px" }}>
+                  <strong>Modo lectura:</strong> lee el diálogo UNA sola vez a ritmo normal (sin traducir palabra por palabra) y luego ocúltalo para responder.
+                </p>
+                {!revealed && picked === null ? <ReadOnce dialogue={exercise.dialogue} /> : null}
+                {supported && (
+                  <button onClick={() => setReadingMode(false)} style={{ border: "none", background: "transparent", color: C.blue, fontSize: 12, textDecoration: "underline", marginTop: 6 }}>
+                    Reintentar con audio
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 16, padding: 18, marginTop: 12 }}>
+            <p style={{ fontWeight: 600, marginBottom: 10 }}>{exercise.question_es}</p>
+            {exercise.options_es.map((op, i) => {
+              const isCorrect = i === exercise.correct_index;
+              const isPicked = picked === i;
+              let border = C.line, bg = "transparent", color = C.ink;
+              if (picked !== null) {
+                if (isCorrect) { border = C.green; bg = C.greenSoft; color = C.green; }
+                else if (isPicked) { border = C.coral; bg = C.coralSoft; color = C.coral; }
+              }
+              return (
+                <button key={i} onClick={() => answer(i)}
+                  style={{ display: "block", width: "100%", textAlign: "left", padding: "12px 14px", borderRadius: 12, border: `1.5px solid ${border}`, background: bg, color, fontSize: 15, marginBottom: 8, fontWeight: picked !== null && isCorrect ? 600 : 400 }}>
+                  {op}
+                </button>
+              );
+            })}
+            {picked !== null && (
+              <p className="fadein" style={{ marginTop: 4, fontWeight: 600, color: picked === exercise.correct_index ? C.green : C.coral }}>
+                {picked === exercise.correct_index ? "✓ ¡Correcto! Tu oído está despertando." : "Casi. Revisa la transcripción y prueba con otro audio."}
+              </p>
+            )}
+          </div>
+
+          {picked !== null && (
+            <div className="fadein" style={{ marginTop: 12 }}>
+              {!revealed ? (
+                <BigButton onClick={() => setRevealed(true)}>Ver transcripción</BigButton>
+              ) : (
+                <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 16, padding: 18 }}>
+                  {exercise.dialogue.map((d, i) => (
+                    <p key={i} style={{ marginBottom: 8, lineHeight: 1.5 }}>
+                      <strong style={{ fontSize: 13, color: C.inkSoft }}>{d.speaker}:</strong>{" "}
+                      <span style={{ fontFamily: FONT_EN, fontSize: 16 }}>{d.line}</span>
+                    </p>
+                  ))}
+                  <div style={{ borderTop: `1px dashed ${C.line}`, paddingTop: 10, marginTop: 10 }}>
+                    <p style={{ fontSize: 13, color: C.inkSoft, textTransform: "uppercase", letterSpacing: 1 }}>Expresión para tu mochila</p>
+                    <p style={{ margin: "4px 0 0", fontFamily: FONT_EN, fontSize: 16 }}>
+                      <span className="hl">{exercise.key_phrase_en}</span>
+                      <span style={{ fontFamily: FONT_UI, fontSize: 13, color: C.inkSoft }}> — {exercise.key_phrase_es}</span>
+                    </p>
+                  </div>
+                </div>
+              )}
+              <button onClick={newExercise}
+                style={{ width: "100%", marginTop: 10, padding: 14, borderRadius: 14, border: `2px dashed ${C.blue}`, background: "transparent", color: C.blue, fontWeight: 600, fontSize: 15 }}>
+                Otro audio
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReadOnce({ dialogue }) {
+  const [visible, setVisible] = useState(true);
+  if (!visible) {
+    return <p style={{ fontSize: 13, color: C.inkSoft, fontStyle: "italic" }}>Diálogo oculto. Responde la pregunta de memoria 👇</p>;
+  }
+  return (
+    <div>
+      <div style={{ background: C.paper, borderRadius: 12, padding: 12 }}>
+        {dialogue.map((d, i) => (
+          <p key={i} style={{ marginBottom: 6, lineHeight: 1.5 }}>
+            <strong style={{ fontSize: 12, color: C.inkSoft }}>{d.speaker}:</strong>{" "}
+            <span style={{ fontFamily: FONT_EN, fontSize: 15 }}>{d.line}</span>
+          </p>
+        ))}
+      </div>
+      <button onClick={() => setVisible(false)}
+        style={{ width: "100%", marginTop: 8, padding: 10, borderRadius: 10, border: `1.5px solid ${C.blue}`, background: C.blueSoft, color: C.blue, fontWeight: 600, fontSize: 14 }}>
+        Listo, ocultar diálogo
+      </button>
+    </div>
+  );
+}
+
+// ============================================================
+// AJUSTES
+// ============================================================
+function Settings({ state, save, onAIChanged }) {
+  const cfg = getAIConfig() || { provider: "gemini", key: "" };
+  const [provider, setProvider] = useState(cfg.provider);
+  const [key, setKey] = useState(cfg.key || "");
+  const [saved, setSaved] = useState(false);
+
+  const saveAI = () => {
+    setAIConfig({ provider, key: key.trim() });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+    onAIChanged();
+  };
+
+  const resetProfile = () => {
+    if (!window.confirm("Esto borra tu perfil y volverás a responder el cuestionario inicial. Tu progreso (racha, mazo) se mantiene. ¿Continuar?")) return;
+    save({ ...state, profile: null });
+  };
+
+  const resetAll = () => {
+    if (!window.confirm("⚠️ Esto borra TODO: perfil, racha, mazo y banco de ejercicios. ¿Seguro?")) return;
+    localStorage.removeItem("fluido-state");
+    localStorage.removeItem("fluido-bank");
+    window.location.reload();
+  };
+
+  return (
+    <div className="fadein">
+      <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 14 }}>Ajustes</h2>
+
+      <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 16, padding: 18, marginBottom: 14 }}>
+        <p style={{ fontWeight: 600, marginBottom: 10 }}>Proveedor de IA</p>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <button onClick={() => setProvider("gemini")}
+            style={{ flex: 1, padding: "10px 8px", borderRadius: 12, border: `2px solid ${provider === "gemini" ? C.blue : C.line}`, background: provider === "gemini" ? C.blueSoft : "transparent", fontWeight: 600, fontSize: 14, color: provider === "gemini" ? C.blue : C.ink }}>
+            Gemini (gratis)
+          </button>
+          <button onClick={() => setProvider("anthropic")}
+            style={{ flex: 1, padding: "10px 8px", borderRadius: 12, border: `2px solid ${provider === "anthropic" ? C.blue : C.line}`, background: provider === "anthropic" ? C.blueSoft : "transparent", fontWeight: 600, fontSize: 14, color: provider === "anthropic" ? C.blue : C.ink }}>
+            Claude
+          </button>
+        </div>
+        <input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="API key"
+          style={{ width: "100%", padding: "12px 14px", fontSize: 15, borderRadius: 12, border: `1.5px solid ${C.line}`, outline: "none" }} />
+        <button onClick={saveAI} disabled={!key.trim()}
+          style={{ width: "100%", marginTop: 10, padding: "12px 16px", borderRadius: 12, border: "none", background: saved ? C.green : C.blue, color: "#fff", fontWeight: 600, opacity: key.trim() ? 1 : 0.5 }}>
+          {saved ? "✓ Guardado" : "Guardar clave"}
+        </button>
+        <p style={{ fontSize: 12, color: C.inkSoft, marginTop: 8 }}>
+          Tu clave se guarda solo en este navegador. Clave gratis de Gemini: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: C.blue }}>aistudio.google.com/apikey</a>
+        </p>
+      </div>
+
+      <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 16, padding: 18 }}>
+        <p style={{ fontWeight: 600, marginBottom: 10 }}>Datos</p>
+        <button onClick={resetProfile}
+          style={{ width: "100%", padding: "12px 16px", borderRadius: 12, border: `1.5px solid ${C.line}`, background: "transparent", color: C.ink, fontWeight: 500, marginBottom: 8 }}>
+          Rehacer cuestionario inicial
+        </button>
+        <button onClick={resetAll}
+          style={{ width: "100%", padding: "12px 16px", borderRadius: 12, border: `1.5px solid ${C.coral}`, background: C.coralSoft, color: C.coral, fontWeight: 600 }}>
+          Borrar todo y empezar de cero
+        </button>
+      </div>
+
+      <p style={{ fontSize: 12, color: C.inkSoft, marginTop: 16, textAlign: "center" }}>
+        Fluido v3 standalone · Hecho con ❤️ para aprender de verdad
+      </p>
+    </div>
+  );
+}
+
+// ---------- Botón grande ----------
+function BigButton({ children, onClick, disabled }) {
+  return (
+    <button onClick={onClick} disabled={disabled}
+      style={{ width: "100%", padding: "14px 18px", borderRadius: 14, border: "none", background: C.blue, color: "#fff", fontWeight: 600, fontSize: 16, opacity: disabled ? 0.5 : 1 }}>
+      {children}
+    </button>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
