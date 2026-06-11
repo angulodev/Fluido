@@ -48,14 +48,14 @@ const PROVIDERS = [
     emoji: "🔵",
     tag: "GRATIS · Recomendado",
     tagColor: C.green,
-    keyPrefix: "AIza",
-    keyPlaceholder: "AIzaSy…",
+    keyPrefix: null,
+    keyPlaceholder: "Pega tu clave de AI Studio…",
     helpUrl: "https://aistudio.google.com/apikey",
     helpSteps: [
       "Entra a aistudio.google.com/apikey",
       "Inicia sesión con tu cuenta de Google",
       'Toca el botón "Create API key"',
-      "Copia la clave (empieza con AIza…)",
+      "Copia la clave que aparece (AIza… o AQ… según tu cuenta)",
     ],
   },
   {
@@ -179,7 +179,7 @@ async function callGemini(key, sys, prompt) {
       if (res.status === 404 || /not found|not supported|deprecated/i.test(msg)) { lastErr = new Error(msg); continue; }
       const e = new Error(msg); e.code = "API";
       if (/api key not valid|API_KEY_INVALID|invalid api key/i.test(msg) || [400,401,403].includes(res.status)) {
-        e.code = "BAD_KEY"; e.userMsg = "Clave de Gemini inválida. Debe empezar con AIza… — créala en aistudio.google.com/apikey";
+        e.code = "BAD_KEY"; e.userMsg = "Clave de Gemini inválida. Asegúrate de copiarla desde el botón 'Create API key' en aistudio.google.com/apikey";
       } else if (res.status === 429) {
         e.code = "RATE"; e.userMsg = "Límite de Gemini alcanzado. Espera un momento e intenta de nuevo.";
       } else { e.userMsg = "Error de Gemini: " + msg; }
