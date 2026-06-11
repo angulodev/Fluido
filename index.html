@@ -300,7 +300,6 @@ function AudioWarning(){
 // APP RAÍZ
 // ============================================================
 function App(){
-  useEffect(()=>{ initInglesBank(); },[]);
   const [state,setState]=useState(loadState);
   const [tab,setTab]=useState("home");
   const [aiReady,setAiReady]=useState(()=>isAIReady());
@@ -1235,6 +1234,7 @@ function Grammar({state, registerActivity}){
   const usedRef = React.useRef(new Set());
 
   const nextCard = useCallback(()=>{
+    initInglesBank(); // garantiza que el banco esté listo
     const bank = loadBank();
     const available = (bank.grammar||[]).filter((_,i)=>!usedRef.current.has(i));
     if(available.length === 0){ usedRef.current.clear(); }
@@ -1312,6 +1312,7 @@ function Verbs({registerActivity}){
   const [flipped, setFlipped] = useState(false);
   const {speak} = useSpeech();
 
+  initInglesBank();
   const bank = loadBank();
   const allVerbs = bank.verbs || [];
   const filtered = filter==="all" ? allVerbs : allVerbs.filter(v=>v.type===filter);
@@ -1378,6 +1379,8 @@ function BigButton({children,onClick,disabled}){
   return<button onClick={onClick} disabled={disabled} style={{width:"100%",padding:"14px 18px",borderRadius:14,border:"none",background:C.blue,color:"#fff",fontWeight:600,fontSize:16,opacity:disabled?0.5:1}}>{children}</button>;
 }
 
+// Inicializar banco antes del primer render
+initInglesBank();
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
 </body>
