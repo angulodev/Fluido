@@ -920,6 +920,105 @@ function ReadOnce({dialogue}){
   );
 }
 
+
+// ============================================================
+// EDITOR DE PERFIL (usado desde Settings)
+// ============================================================
+function ProfileEditor({state,save,onClose}){
+  const p=state.profile||{};
+  const e=p.extra||{};
+  const [name,setName]=useState(p.name||"");
+  const [role,setRole]=useState(p.role||"");
+  const [goals,setGoals]=useState(p.goals||[]);
+  const [interests,setInterests]=useState(p.interests||[]);
+  const [level,setLevel]=useState(state.level||"B1");
+  const [nickname,setNickname]=useState(e.nickname||"");
+  const [gender,setGender]=useState(e.gender||"");
+  const [age,setAge]=useState(e.age?String(e.age):"");
+  const [livingWith,setLivingWith]=useState(e.livingWith||"");
+  const [hobbies,setHobbies]=useState(e.hobbies||"");
+  const [reason,setReason]=useState(e.reason||"");
+  const [section,setSection]=useState("basic"); // "basic" | "extra"
+
+  const toggle=(list,setList,item)=>setList(list.includes(item)?list.filter(x=>x!==item):[...list,item]);
+  const iStyle={width:"100%",marginTop:6,padding:"12px 14px",fontSize:15,borderRadius:12,border:`1.5px solid ${C.line}`,background:C.card,color:C.ink,outline:"none"};
+  const taStyle={...iStyle,resize:"vertical",minHeight:72};
+
+  const handleSave=()=>{
+    const extra=(nickname||gender||age||livingWith||hobbies||reason)?{
+      nickname:nickname.trim()||null,gender:gender||null,age:age?parseInt(age):null,
+      livingWith:livingWith||null,hobbies:hobbies.trim()||null,reason:reason.trim()||null
+    }:null;
+    save({...state,level,profile:{...p,name:name.trim()||p.name,role:role.trim()||p.role,goals,interests,extra}});
+    onClose();
+  };
+
+  return(
+    <div className="fadein" style={{background:C.card,border:`1.5px solid ${C.blue}`,borderRadius:16,padding:18,marginBottom:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <p style={{fontWeight:700,fontSize:16}}>✏️ Editar perfil</p>
+        <button onClick={onClose} style={{border:"none",background:"transparent",color:C.inkSoft,fontSize:20,lineHeight:1}}>×</button>
+      </div>
+      {/* Tabs */}
+      <div style={{display:"flex",gap:8,marginBottom:16}}>
+        {[{id:"basic",label:"📋 Básico"},{id:"extra",label:"✨ Extra"}].map(t=>(
+          <button key={t.id} onClick={()=>setSection(t.id)}
+            style={{flex:1,padding:"10px 0",borderRadius:10,border:`1.5px solid ${section===t.id?C.blue:C.line}`,background:section===t.id?C.blueSoft:"transparent",color:section===t.id?C.blue:C.inkSoft,fontWeight:600,fontSize:13}}>
+            {t.label}
+          </button>))}
+      </div>
+
+      {section==="basic"&&(
+        <div className="fadein" style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div><label style={{fontSize:13,color:C.inkSoft}}>Nombre</label><input value={name} onChange={e=>setName(e.target.value)} style={iStyle}/></div>
+          <div><label style={{fontSize:13,color:C.inkSoft}}>¿A qué te dedicas?</label><input value={role} onChange={e=>setRole(e.target.value)} placeholder="Consultor, estudiante…" style={iStyle}/></div>
+          <div>
+            <label style={{fontSize:13,color:C.inkSoft}}>¿Para qué necesitas el inglés?</label>
+            <div style={{marginTop:8}}><ChipGrid options={GOAL_OPTIONS} selected={goals} onToggle={o=>toggle(goals,setGoals,o)}/></div>
+          </div>
+          <div>
+            <label style={{fontSize:13,color:C.inkSoft}}>Temas de interés</label>
+            <div style={{marginTop:8}}><ChipGrid options={INTEREST_OPTIONS} selected={interests} onToggle={o=>toggle(interests,setInterests,o)}/></div>
+          </div>
+          <div>
+            <label style={{fontSize:13,color:C.inkSoft}}>Nivel</label>
+            <div style={{display:"flex",gap:8,marginTop:6}}>
+              {LEVELS.map(lv=>(
+                <button key={lv.id} onClick={()=>setLevel(lv.id)}
+                  style={{flex:1,padding:"10px 6px",borderRadius:10,border:`2px solid ${level===lv.id?C.blue:C.line}`,background:level===lv.id?C.blueSoft:C.card,color:level===lv.id?C.blue:C.inkSoft,fontWeight:600,fontSize:13}}>
+                  {lv.label}
+                </button>))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {section==="extra"&&(
+        <div className="fadein" style={{display:"flex",flexDirection:"column",gap:12}}>
+          <p style={{fontSize:13,color:C.inkSoft,marginTop:-4}}>Todo opcional. Más info = escenarios más personales.</p>
+          <div><label style={{fontSize:13,color:C.inkSoft}}>¿Cómo prefieren llamarte?</label><input value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="Apodo, pronombres…" style={iStyle}/></div>
+          <div>
+            <label style={{fontSize:13,color:C.inkSoft}}>Género</label>
+            <div style={{marginTop:8}}><ChipGrid options={GENDER_OPTIONS} selected={gender?[gender]:[]} onToggle={o=>setGender(gender===o?"":o)}/></div>
+          </div>
+          <div><label style={{fontSize:13,color:C.inkSoft}}>Edad</label><input type="number" value={age} onChange={e=>setAge(e.target.value)} placeholder="Opcional" min="10" max="99" style={{...iStyle,width:"100px"}}/></div>
+          <div>
+            <label style={{fontSize:13,color:C.inkSoft}}>¿Con quién vives?</label>
+            <div style={{marginTop:8}}><ChipGrid options={LIVING_OPTIONS} selected={livingWith?[livingWith]:[]} onToggle={o=>setLivingWith(livingWith===o?"":o)}/></div>
+          </div>
+          <div><label style={{fontSize:13,color:C.inkSoft}}>¿Qué te gusta hacer?</label><textarea value={hobbies} onChange={e=>setHobbies(e.target.value)} placeholder="Guitarra, fútbol, hiking, gaming…" style={taStyle}/></div>
+          <div><label style={{fontSize:13,color:C.inkSoft}}>¿Por qué quieres aprender inglés?</label><textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Tu historia y motivación…" style={taStyle}/></div>
+        </div>
+      )}
+
+      <button onClick={handleSave}
+        style={{width:"100%",marginTop:16,padding:"13px 0",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontWeight:600,fontSize:15}}>
+        Guardar cambios
+      </button>
+    </div>
+  );
+}
+
 // ============================================================
 // AJUSTES — con selector de tema
 // ============================================================
@@ -927,6 +1026,7 @@ function Settings({state,save,onAIChanged,onThemeChange}){
   const [expanded,setExpanded]=useState(null);
   const [editKeys,setEditKeys]=useState({});
   const [testState,setTestState]=useState({});
+  const [editingProfile,setEditingProfile]=useState(false);
   const savedTheme=getSavedTheme();
 
   const cfg=getAIConfig()||{active:null,keys:{}};
@@ -978,6 +1078,27 @@ function Settings({state,save,onAIChanged,onThemeChange}){
           })}
         </div>
       </div>
+
+      {/* --- PERFIL --- */}
+      {editingProfile?(
+        <ProfileEditor state={state} save={save} onClose={()=>setEditingProfile(false)}/>
+      ):(
+        <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:16,marginBottom:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <p style={{fontWeight:600,fontSize:15}}>👤 Tu perfil</p>
+            <button onClick={()=>setEditingProfile(true)}
+              style={{padding:"6px 12px",borderRadius:8,border:`1.5px solid ${C.blue}`,background:C.blueSoft,color:C.blue,fontWeight:600,fontSize:13}}>
+              ✏️ Editar
+            </button>
+          </div>
+          <div style={{fontSize:13,color:C.inkSoft,lineHeight:1.8}}>
+            <span style={{color:C.ink,fontWeight:500}}>{state.profile.name}</span> · {state.profile.role}<br/>
+            <span>Objetivos: {(state.profile.goals||[]).join(", ")||"—"}</span><br/>
+            <span>Intereses: {(state.profile.interests||[]).join(", ")||"—"}</span>
+            {state.profile.extra&&(<><br/><span style={{color:C.blue,fontSize:12}}>✨ Perfil extendido activo</span></>)}
+          </div>
+        </div>
+      )}
 
       {/* --- IA ACTIVA --- */}
       {activeProv?(
