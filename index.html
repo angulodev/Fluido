@@ -560,9 +560,16 @@ function ChipGrid({options,selected,onToggle}){
   );
 }
 
+const LEVEL_GUIDE = {
+  A0: "NIVEL A0 (principiante absoluto): vocabulario de las 500 palabras más comunes. Frases de 3-7 palabras. SOLO presente simple. Sin modismos, sin phrasal verbs, sin subordinadas. Como hablarle a alguien en su primera semana de inglés.",
+  A2: "NIVEL A2 (básico): vocabulario cotidiano de ~1000 palabras. Frases de 6-12 palabras. Presente, pasado simple y futuro con 'going to'. Phrasal verbs muy comunes (get up, look for). Sin jerga ni estructuras complejas. Como un libro de texto de inglés básico.",
+  B1: "NIVEL B1 (intermedio): vocabulario de ~2500 palabras incluyendo términos de trabajo. Frases de 10-18 palabras con subordinadas. Todos los tiempos verbales comunes, condicionales tipo 1, voz pasiva simple. Algunos phrasal verbs y expresiones idiomáticas frecuentes. Como una conversación laboral normal entre colegas.",
+  B2: "NIVEL B2 (avanzado): vocabulario rico y preciso (~4000+ palabras), registro profesional. Frases largas y complejas con múltiples cláusulas. Todos los tiempos, condicionales mixtos, voz pasiva, modales de probabilidad. Modismos, phrasal verbs avanzados, matices y sarcasmo sutil. Como un nativo profesional en una reunión exigente o entrevista senior."
+};
+function levelInstruction(state){ return LEVEL_GUIDE[state.level] || LEVEL_GUIDE.B1; }
 function profileForPrompts(state,withName){
   const p=state.profile||{};
-  let s=`${withName&&p.name?`Nombre: ${p.name}. `:""}Ocupación: ${p.role||"profesional"}. Objetivos: ${(p.goals||[]).join(", ")}. Intereses: ${(p.interests||[]).join(", ")}. Nivel: ${state.level}.`;
+  let s=`${withName&&p.name?`Nombre: ${p.name}. `:""}Ocupación: ${p.role||"profesional"}. Objetivos: ${(p.goals||[]).join(", ")}. Intereses: ${(p.interests||[]).join(", ")}. ${levelInstruction(state)}`;
   if(p.extra){
     const e=p.extra;
     if(e.nickname) s+=` Le gusta que le llamen "${e.nickname}".`;
@@ -702,7 +709,7 @@ function Talk({state,registerActivity}){
     try{
       const basePrompt=suggestion
         ? `El estudiante quiere practicar este escenario específico: "${suggestion}"\n\nAdáptalo según su perfil: ${profileForPrompts(state,true)}\n\nDevuelve JSON: {"title_es":"título corto","context_es":"contexto 1-2 frases, quién es el estudiante y el interlocutor","opening_en":"primer mensaje del interlocutor en inglés adecuado al nivel"}`
-        : `Perfil: ${profileForPrompts(state,true)}\n\nGenera una situación de práctica PERSONALIZADA: usa su ocupación, objetivos y a veces sus intereses. Varía el contexto (semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve JSON: {"title_es":"título corto","context_es":"contexto 1-2 frases","opening_en":"primer mensaje del interlocutor en inglés"}`;
+        : `Perfil: ${profileForPrompts(state,true)}\n\nGenera una situación de práctica PERSONALIZADA: usa su ocupación, objetivos y a veces sus intereses. Varía el contexto (semilla: ${Math.random().toString(36).slice(2)}).\nIMPORTANTE: el inglés de opening_en debe ajustarse EXACTAMENTE a la complejidad del nivel indicado arriba.\n\nDevuelve JSON: {"title_es":"título corto","context_es":"contexto 1-2 frases","opening_en":"primer mensaje del interlocutor en inglés AJUSTADO AL NIVEL"}`;
       const a0 = state.level==="A0" ? '\nNIVEL A0 (principiante absoluto): usa inglés ULTRA simple (frases de 3-8 palabras, vocabulario básico) y AGREGA el campo "opening_es" con la traducción al español de opening_en.' : "";
       const data=await askAI_JSON(basePrompt+a0,"Eres un profesor de inglés que crea simulaciones realistas y motivantes.");
       setScenario(data);setMessages([{role:"them",text:data.opening_en,es:data.opening_es||null}]);
@@ -718,7 +725,7 @@ function Talk({state,registerActivity}){
     try{
       const history=[...messages,myMsg].map(m=>(m.role==="them"?"INTERLOCUTOR: ":"ESTUDIANTE: ")+m.text).join("\n");
       const data=await askAI_JSON(
-        `Perfil: ${profileForPrompts(state,true)}\nSituación: ${scenario.context_es}\n\nConversación:\n${history}\n\nCorrige errores, da versión natural y continúa como interlocutor.\n\nDevuelve JSON: {"errors":[{"wrong":"error","right":"corrección","why_es":"explicación"}],"natural_en":"versión nativa o null","tip_es":"consejo breve o null","reply_en":"respuesta del interlocutor que invite a seguir"${state.level==="A0"?',"reply_es":"traducción al español de reply_en"':""}}${state.level==="A0"?'\nNIVEL A0: reply_en debe ser ULTRA simple (3-8 palabras).':""}`,
+        `Perfil: ${profileForPrompts(state,true)}\nSituación: ${scenario.context_es}\n\nConversación:\n${history}\n\nCorrige errores, da versión natural y continúa como interlocutor.\n\nDevuelve JSON: {"errors":[{"wrong":"error","right":"corrección","why_es":"explicación"}],"natural_en":"versión nativa o null","tip_es":"consejo breve o null","reply_en":"respuesta del interlocutor que invite a seguir, AJUSTADA a la complejidad del nivel indicado en el perfil"${state.level==="A0"?',"reply_es":"traducción al español de reply_en"':""}}`,
         "Eres un coach de inglés cálido y preciso. Corriges sin desanimar.");
       setMessages(m=>{const c=[...m];c[c.length-1]={...myMsg,feedback:data};return[...c,{role:"them",text:data.reply_en,es:data.reply_es||null}];});
       registerActivity("talk");
@@ -847,7 +854,7 @@ function Phrases({state,save,registerActivity,initialMode}){
       let newPhrases=[...fromBank];
       if(newPhrases.length<5){
         const need=5-newPhrases.length;
-        const arr=await askAI_JSON(`Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera ${need} frases nuevas útiles para este perfil. NO repitas: ${state.deck.map(c=>c.en).slice(-40).join(" | ")}\n\nDevuelve JSON array: [{"es":"español","en":"inglés","note_es":"nota breve"}]`,
+        const arr=await askAI_JSON(`Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera ${need} frases nuevas útiles para este perfil, con dificultad de inglés ajustada EXACTAMENTE al nivel indicado en el perfil. NO repitas: ${state.deck.map(c=>c.en).slice(-40).join(" | ")}\n\nDevuelve JSON array: [{"es":"español","en":"inglés","note_es":"nota breve"}]`,
           "Eres un profesor de inglés práctico.");
         newPhrases=[...newPhrases,...arr.map(p=>({es:p.es,en:p.en,note_es:p.note_es||""}))];
         bank.phrases=[...bank.phrases,...arr.map(p=>({es:p.es,en:p.en,note_es:p.note_es||""}))];
@@ -957,7 +964,7 @@ function Listen({state,save,registerActivity}){
       }
       const a0L = state.level==="A0" ? ' NIVEL A0: el diálogo debe ser de solo 3-4 líneas MUY cortas y simples, y cada item de dialogue debe incluir además "line_es" con su traducción al español.' : "";
       const data=await askAI_JSON(
-        `Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera un ejercicio de listening en inglés para este perfil: diálogo (4-6 líneas) entre dos personas sobre sus objetivos o intereses. Varía el tema (semilla: ${Math.random().toString(36).slice(2)}).${a0L}\n\nDevuelve JSON: {"title_es":"título","dialogue":[{"speaker":"nombre","line":"inglés"}],"question_es":"pregunta de comprensión","options_es":["A","B","C"],"correct_index":0,"key_phrase_en":"expresión útil","key_phrase_es":"traducción"}`,
+        `Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera un ejercicio de listening en inglés para este perfil: diálogo (4-6 líneas) entre dos personas sobre sus objetivos o intereses. El inglés del diálogo DEBE ajustarse EXACTAMENTE a la complejidad del nivel indicado en el perfil. Varía el tema (semilla: ${Math.random().toString(36).slice(2)}).${a0L}\n\nDevuelve JSON: {"title_es":"título","dialogue":[{"speaker":"nombre","line":"inglés"}],"question_es":"pregunta de comprensión","options_es":["A","B","C"],"correct_index":0,"key_phrase_en":"expresión útil","key_phrase_es":"traducción"}`,
         "Eres un profesor de inglés que crea ejercicios de listening realistas.");
       data.id="L"+Date.now()+Math.random().toString(36).slice(2,6);data.level=state.level;
       setExercise(data);const bank2=loadBank();bank2.listening=[...bank2.listening,data];saveBank(bank2);
