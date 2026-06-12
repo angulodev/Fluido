@@ -90,6 +90,8 @@ const LEVELS = [
   { id:"A2", label:"Básico",       desc:"Frases cortas y simples" },
   { id:"B1", label:"Intermedio",   desc:"Conversación de trabajo" },
   { id:"B2", label:"Avanzado",     desc:"Reuniones y entrevistas" },
+  { id:"C1", label:"Competente",   desc:"Fluidez profesional" },
+  { id:"C2", label:"Dominio",      desc:"Nivel casi nativo" },
 ];
 const GOAL_OPTIONS    = ["Entrevistas de trabajo","Reuniones y daily standups","Emails y chat","Viajes","Conversación casual"];
 const INTEREST_OPTIONS = ["Tecnología / software","Negocios","Gaming","Deportes","Cine y series","Música","Cocina","Mascotas","Naturaleza"];
@@ -564,7 +566,9 @@ const LEVEL_GUIDE = {
   A0: "NIVEL A0 (principiante absoluto): vocabulario de las 500 palabras más comunes. Frases de 3-7 palabras. SOLO presente simple. Sin modismos, sin phrasal verbs, sin subordinadas. Como hablarle a alguien en su primera semana de inglés.",
   A2: "NIVEL A2 (básico): vocabulario cotidiano de ~1000 palabras. Frases de 6-12 palabras. Presente, pasado simple y futuro con 'going to'. Phrasal verbs muy comunes (get up, look for). Sin jerga ni estructuras complejas. Como un libro de texto de inglés básico.",
   B1: "NIVEL B1 (intermedio): vocabulario de ~2500 palabras incluyendo términos de trabajo. Frases de 10-18 palabras con subordinadas. Todos los tiempos verbales comunes, condicionales tipo 1, voz pasiva simple. Algunos phrasal verbs y expresiones idiomáticas frecuentes. Como una conversación laboral normal entre colegas.",
-  B2: "NIVEL B2 (avanzado): vocabulario rico y preciso (~4000+ palabras), registro profesional. Frases largas y complejas con múltiples cláusulas. Todos los tiempos, condicionales mixtos, voz pasiva, modales de probabilidad. Modismos, phrasal verbs avanzados, matices y sarcasmo sutil. Como un nativo profesional en una reunión exigente o entrevista senior."
+  B2: "NIVEL B2 (avanzado): vocabulario rico y preciso (~4000+ palabras), registro profesional. Frases largas y complejas con múltiples cláusulas. Todos los tiempos, condicionales mixtos, voz pasiva, modales de probabilidad. Modismos, phrasal verbs avanzados, matices y sarcasmo sutil. Como un nativo profesional en una reunión exigente o entrevista senior.",
+  C1: "NIVEL C1 (competente): vocabulario muy amplio y especializado, incluyendo colocaciones naturales y lenguaje técnico de su industria. Estructuras sofisticadas, inversiones, cleft sentences, conectores formales. Registro flexible según contexto (formal/informal). Humor, ironía y referencias culturales. Como un profesional bilingüe avanzado que negocia, presenta y lidera en inglés sin esfuerzo aparente.",
+  C2: "NIVEL C2 (dominio/casi nativo): control total del idioma. Vocabulario preciso, idiomático y matizado, incluyendo expresiones poco frecuentes, juegos de palabras y connotaciones sutiles. Cualquier estructura gramatical, por compleja que sea. Estilo natural indistinguible de un nativo culto. Maneja ambigüedad, dobles sentidos, registro literario y argot según convenga. Como un nativo educado en cualquier situación, desde debate académico hasta charla casual con jerga regional."
 };
 function levelInstruction(state){ return LEVEL_GUIDE[state.level] || LEVEL_GUIDE.B1; }
 function profileForPrompts(state,withName){
@@ -879,7 +883,7 @@ function Phrases({state,save,registerActivity,initialMode}){
           </button>))}
       </div>
       {mode==="grammar" && <Grammar state={state} registerActivity={registerActivity}/>}
-      {mode==="verbs"   && <Verbs registerActivity={registerActivity}/>}
+      {mode==="verbs"   && <Verbs registerActivity={registerActivity} state={state}/>}
       {mode==="vocab"   && <Vocabulary registerActivity={registerActivity}/>}
       {mode==="cards" && (<div>
       <p style={{marginBottom:14,fontSize:14,color:C.inkSoft}}>Lee el español, <span className="hl">dilo en voz alta en inglés</span>, y recién ahí voltea la tarjeta.</p>
@@ -1521,7 +1525,7 @@ function getVerbSRS(){try{return JSON.parse(localStorage.getItem("fluido-verbs-s
 function setVerbSRS(s){try{localStorage.setItem("fluido-verbs-srs",JSON.stringify(s));}catch(e){}}
 function verbKey(v){return (v.en||"").split(" / ")[0].toLowerCase().trim();}
 
-function Verbs({registerActivity}){
+function Verbs({registerActivity,state}){
   const [filter,setFilter]=useState("all");
   const [search,setSearch]=useState("");
   const [current,setCurrent]=useState(null);
@@ -1591,7 +1595,7 @@ function Verbs({registerActivity}){
                   </div>))}
               </div>
               {card.note&&<p style={{fontSize:12,color:C.inkSoft,marginTop:10}}>💡 {card.note}</p>}
-              <VerbExamples card={card}/>
+              <VerbExamples card={card} level={state?state.level:'B1'}/>
             </div>
           )}
         </div>
@@ -1791,9 +1795,9 @@ function Vocabulary({registerActivity}){
 // ============================================================
 // EJEMPLOS DE USO PARA VERBOS — generados por IA, guardados localmente
 // ============================================================
-function VerbExamples({card}){
+function VerbExamples({card,level}){
   const inf=(card.en||"").split(" / ")[0];
-  const storeKey="fluido-vex-"+inf.replace(/[^a-z]/gi,"");
+  const storeKey="fluido-vex-"+(level||"B1")+"-"+inf.replace(/[^a-z]/gi,"");
   const [ex,setEx]=useState(()=>{try{return JSON.parse(localStorage.getItem(storeKey)||"null");}catch(e){return null;}});
   const [loading,setLoading]=useState(false);
   const [err,setErr]=useState(null);
@@ -1803,7 +1807,7 @@ function VerbExamples({card}){
     setLoading(true);setErr(null);
     try{
       const data=await askAI_JSON(
-        `Verbo en inglés: "${card.en}" — significa "${card.es}". Genera 3 ejemplos de uso cortos y cotidianos, uno por cada forma: presente, pasado simple, y participio (con have/has).\nDevuelve JSON: {"examples":[{"form":"Presente","en":"frase corta","es":"traducción"},{"form":"Pasado","en":"...","es":"..."},{"form":"Participio","en":"...","es":"..."}]}`,
+        `Verbo en inglés: "${card.en}" — significa "${card.es}". Genera 3 ejemplos de uso, uno por cada forma: presente, pasado simple, y participio (con have/has). ${LEVEL_GUIDE[level]||LEVEL_GUIDE.B1} Los ejemplos deben tener EXACTAMENTE esa complejidad de vocabulario y gramática.\nDevuelve JSON: {"examples":[{"form":"Presente","en":"frase","es":"traducción"},{"form":"Pasado","en":"...","es":"..."},{"form":"Participio","en":"...","es":"..."}]}`,
         "Eres un profesor de inglés práctico.");
       const arr=data.examples||[];
       setEx(arr);
