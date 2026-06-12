@@ -20,8 +20,8 @@
   textarea, input, select { font-family: 'Lexend', system-ui, sans-serif; }
   body { background: var(--paper, #F7F9FB); color: var(--ink, #13243B); }
   .hl  { background: var(--marker); padding: 1px 5px; border-radius: 4px; color: #1E293B !important; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
-  .hl-red   { background: linear-gradient(transparent 55%, #FDEDEA 0%); text-decoration: line-through; text-decoration-color: #B91C1C; padding: 0 2px; color: #7F1D1D !important; }
-  .hl-green { background: linear-gradient(transparent 55%, #D1FAE5 0%); padding: 0 2px; font-weight: 600; color: #064E3B !important; }
+  .hl-red   { background: #FDEDEA; text-decoration: line-through; text-decoration-color: #B91C1C; padding: 1px 5px; border-radius: 4px; color: #7F1D1D !important; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+  .hl-green { background: #D1FAE5; padding: 1px 5px; border-radius: 4px; font-weight: 600; color: #064E3B !important; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
   .fadein { animation: fadein .3s ease; }
   @keyframes fadein { from { opacity:0; transform:translateY(5px);} to { opacity:1; transform:none; } }
   @media (prefers-reduced-motion: reduce) { .fadein { animation: none; } }
@@ -679,9 +679,12 @@ function StatCard({big,label,accent}){return(<div style={{flex:1,background:C.ca
 // ============================================================
 // CONVERSAR — con escenarios propios
 // ============================================================
+function talkLoad(){try{return JSON.parse(sessionStorage.getItem("fluido-talk")||"null");}catch(e){return null;}}
+function talkSave(d){try{sessionStorage.setItem("fluido-talk",JSON.stringify(d));}catch(e){}}
 function Talk({state,registerActivity}){
-  const [scenario,setScenario]=useState(null);
-  const [messages,setMessages]=useState([]);
+  const saved=talkLoad();
+  const [scenario,setScenario]=useState(saved?.scenario||null);
+  const [messages,setMessages]=useState(saved?.messages||[]);
   const [input,setInput]=useState("");
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState(null);
@@ -690,9 +693,11 @@ function Talk({state,registerActivity}){
   const bottomRef=useRef(null);
   const {speak,failed}=useSpeech();
   useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:"smooth"});},[messages,loading]);
+  useEffect(()=>{ if(scenario) talkSave({scenario,messages}); },[scenario,messages]);
 
   const newScenario=async(suggestion)=>{
     setLoading(true);setError(null);setMessages([]);setScenario(null);setShowCustom(false);
+    try{sessionStorage.removeItem("fluido-talk");}catch(e){}
     try{
       const basePrompt=suggestion
         ? `El estudiante quiere practicar este escenario específico: "${suggestion}"\n\nAdáptalo según su perfil: ${profileForPrompts(state,true)}\n\nDevuelve JSON: {"title_es":"título corto","context_es":"contexto 1-2 frases, quién es el estudiante y el interlocutor","opening_en":"primer mensaje del interlocutor en inglés adecuado al nivel"}`
@@ -760,7 +765,7 @@ function Talk({state,registerActivity}){
       <div style={{flex:1}}>
         {messages.map((m,i)=>(
           <div key={i} className="fadein" style={{marginBottom:10}}>
-            <div style={{maxWidth:"85%",padding:"10px 14px",borderRadius:14,fontSize:16,lineHeight:1.5,fontFamily:FEN,background:m.role==="me"?C.blue:C.card,color:m.role==="me"?"#fff":C.ink,border:m.role==="me"?"none":`1px solid ${C.line}`,marginLeft:m.role==="me"?"auto":0}}>
+            <div style={{maxWidth:"85%",padding:"10px 14px",borderRadius:14,fontSize:16,lineHeight:1.5,fontFamily:FEN,background:m.role==="me"?C.blue:C.card,color:m.role==="me"?(getSavedTheme().startsWith("dark")?"#0F172A":"#fff"):C.ink,border:m.role==="me"?"none":`1px solid ${C.line}`,marginLeft:m.role==="me"?"auto":0,wordBreak:"break-word",overflowWrap:"anywhere"}}>
               {m.text}
               {m.role==="them"&&<button onClick={()=>speak(m.text)} aria-label="Escuchar" style={{border:"none",background:"transparent",fontSize:16,marginLeft:6}}>🔊</button>}
               {m.role==="them"&&m.es&&<div style={{fontSize:12.5,color:C.inkSoft,fontStyle:"italic",marginTop:5,fontFamily:FUI,borderTop:`1px dashed ${C.line}`,paddingTop:5}}>🇪🇸 {m.es}</div>}
@@ -798,7 +803,7 @@ function Feedback({fb}){
   return(
     <div className="fadein" style={{maxWidth:"92%",marginLeft:"auto",marginTop:6,background:C.card,border:`1px dashed ${C.line}`,borderRadius:12,padding:"10px 12px",fontSize:14}}>
       {hasErrors&&fb.errors.map((e,i)=>(<p key={i} style={{margin:"0 0 6px",lineHeight:1.6}}><span className="hl-red" style={{fontFamily:FEN}}>{e.wrong}</span>{" → "}<span className="hl-green" style={{fontFamily:FEN}}>{e.right}</span><br/><span style={{color:C.inkSoft,fontSize:13}}>{e.why_es}</span></p>))}
-      {fb.natural_en&&<p style={{margin:"6px 0 0",lineHeight:1.5}}><span style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Versión natural</span><br/><span className="hl" style={{fontFamily:FEN,fontSize:15}}>{fb.natural_en}</span></p>}
+      {fb.natural_en&&<div style={{margin:"8px 0 0"}}><span style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Versión natural</span><div style={{marginTop:4,padding:"8px 12px",background:C.blueSoft,borderRadius:10,fontFamily:FEN,fontSize:16,color:C.ink,borderLeft:`3px solid ${C.blue}`}}>{fb.natural_en}</div></div>}
       {fb.tip_es&&<p style={{margin:"8px 0 0",fontSize:13,color:C.blue}}>💡 {fb.tip_es}</p>}
     </div>
   );
@@ -808,7 +813,7 @@ function Feedback({fb}){
 // FRASES
 // ============================================================
 function Phrases({state,save,registerActivity,initialMode}){
-  const [mode,setMode]=useState(initialMode||'cards');
+  const [mode,setMode]=useState(initialMode||(state.level==='A0'?'vocab':'cards'));
   const [flipped,setFlipped]=useState(false);
   const [generating,setGenerating]=useState(false);
   const [error,setError]=useState(null);
@@ -849,7 +854,10 @@ function Phrases({state,save,registerActivity,initialMode}){
       <h2 style={{fontSize:24,fontWeight:700,marginBottom:4}}>Frases</h2>
       {/* Mode switcher */}
       <div style={{display:"flex",gap:6,marginBottom:14}}>
-        {[{id:"cards",l:"📚 Frases"},{id:"grammar",l:"📝 Quiz"},{id:"verbs",l:"🔤 Verbos"},{id:"vocab",l:"🔠 Vocab"}].map(m=>(
+        {(state.level==="A0"
+          ? [{id:"vocab",l:"🔠 Vocab"},{id:"verbs",l:"🔤 Verbos"},{id:"grammar",l:"📝 Quiz"},{id:"cards",l:"📚 Frases"}]
+          : [{id:"cards",l:"📚 Frases"},{id:"grammar",l:"📝 Quiz"},{id:"verbs",l:"🔤 Verbos"},{id:"vocab",l:"🔠 Vocab"}]
+        ).map(m=>(
           <button key={m.id} onClick={()=>setMode(m.id)}
             style={{flex:1,padding:"8px 4px",borderRadius:10,border:`1.5px solid ${mode===m.id?C.blue:C.line}`,background:mode===m.id?C.blueSoft:"transparent",color:mode===m.id?C.blue:C.inkSoft,fontWeight:600,fontSize:11}}>
             {m.l}
@@ -909,22 +917,27 @@ function GradeBtn({color,bg,onClick,label,sub}){return(<button onClick={onClick}
 // ============================================================
 const SPEEDS=[{v:0.5,l:"0.5×"},{v:0.8,l:"0.8×"},{v:1.0,l:"Normal"},{v:1.5,l:"1.5×"},{v:2.0,l:"2×"}];
 
+function listenLoad(){try{return JSON.parse(sessionStorage.getItem("fluido-listen")||"null");}catch(e){return null;}}
+function listenSave(d){try{sessionStorage.setItem("fluido-listen",JSON.stringify(d));}catch(e){}}
 function Listen({state,save,registerActivity}){
-  const [exercise,setExercise]=useState(null);
+  const sv=listenLoad();
+  const [exercise,setExercise]=useState(sv?.exercise||null);
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState(null);
   const [info,setInfo]=useState(null);
-  const [picked,setPicked]=useState(null);
-  const [revealed,setRevealed]=useState(false);
+  const [picked,setPicked]=useState(sv?.picked??null);
+  const [revealed,setRevealed]=useState(sv?.revealed||false);
   const [readingMode,setReadingMode]=useState(false);
   const [rate,setRate]=useState(1.0);
   const [playing,setPlaying]=useState(false);
   const {speak,stop,failed,supported}=useSpeech();
   useEffect(()=>()=>stop(),[stop]);
   useEffect(()=>{if(failed)setReadingMode(true);},[failed]);
+  useEffect(()=>{ if(exercise) listenSave({exercise,picked,revealed}); },[exercise,picked,revealed]);
 
   const newExercise=async()=>{
     setLoading(true);setError(null);setInfo(null);setExercise(null);setPicked(null);setRevealed(false);stop();setPlaying(false);
+    try{sessionStorage.removeItem("fluido-listen");}catch(e){}
     try{
       const bank=loadBank();
       const used=new Set(state.usedListening||[]);
@@ -1376,10 +1389,12 @@ function Grammar({state, registerActivity}){
   const [picked, setPicked] = useState(null);
   const [total, setTotal] = useState(0);
   const [correct, setCorrect] = useState(0);
+  const [tr, setTr] = useState(null);
   const usedRef = React.useRef(new Set());
+  const isA0 = state.level==="A0";
 
   const nextCard = useCallback(()=>{
-    initInglesBank(); // garantiza que el banco esté listo
+    initInglesBank();
     const bank = loadBank();
     const available = (bank.grammar||[]).filter((_,i)=>!usedRef.current.has(i));
     if(available.length === 0){ usedRef.current.clear(); }
@@ -1388,11 +1403,20 @@ function Grammar({state, registerActivity}){
     const idx = Math.floor(Math.random()*pool.length);
     const globalIdx = (bank.grammar||[]).indexOf(pool[idx]);
     usedRef.current.add(globalIdx);
-    // shuffle options
     const c = {...pool[idx]};
     c.shuffled = [...c.opts].sort(()=>Math.random()-0.5);
-    setCard(c); setPicked(null);
+    setCard(c); setPicked(null); setTr(null);
   },[]);
+
+  useEffect(()=>{
+    if(!isA0||!card) return;
+    const ck="fluido-qtr-"+(card.q||"").slice(0,40).replace(/[^a-z]/gi,"");
+    try{const cached=JSON.parse(localStorage.getItem(ck)||"null");if(cached){setTr(cached);return;}}catch(e){}
+    askAI_JSON(
+      `Traduce al espanol esta pregunta de gramatica inglesa y cada opcion.\nPregunta: "${card.q}"\nOpciones: ${JSON.stringify(card.opts)}\nDevuelve JSON: {"q":"traduccion","opts":{${card.opts.map(o=>`"${o}":"traduccion breve"`).join(",")}}}`,
+      "Eres un traductor ingles-espanol."
+    ).then(data=>{setTr(data);try{localStorage.setItem(ck,JSON.stringify(data));}catch(e){}}).catch(()=>{});
+  },[card,isA0]);
 
   useEffect(()=>{ nextCard(); },[]);
 
@@ -1421,17 +1445,21 @@ function Grammar({state, registerActivity}){
       </div>}
       <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18}}>
         <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,marginBottom:8}}>Elige la opción correcta</p>
-        <p style={{fontSize:19,fontWeight:600,lineHeight:1.4,marginBottom:16,fontFamily:"'Newsreader',Georgia,serif"}}>{card.q.replace("___","___")}</p>
+        <p style={{fontSize:19,fontWeight:600,lineHeight:1.4,marginBottom:isA0&&tr?2:8,fontFamily:"'Newsreader',Georgia,serif"}}>{card.q}</p>
+        {isA0&&tr&&tr.q&&<p style={{fontSize:14,color:C.inkSoft,fontStyle:"italic",marginBottom:10}}>🇪🇸 {tr.q}</p>}
+        {isA0&&!tr&&<p style={{fontSize:12,color:C.inkSoft,marginBottom:10}}>Traduciendo…</p>}
         {card.shuffled.map((opt,i)=>{
           let bg=C.card, border=C.line, color=C.ink;
           if(picked!==null){
             if(opt===card.ans){bg=C.greenSoft;border=C.green;color=C.green;}
             else if(opt===picked){bg=C.coralSoft;border=C.coral;color=C.coral;}
           }
+          const optTr=isA0&&tr&&tr.opts?tr.opts[opt]:null;
           return(
             <button key={i} onClick={()=>answer(opt)}
-              style={{display:"block",width:"100%",textAlign:"left",padding:"12px 14px",borderRadius:12,border:`1.5px solid ${border}`,background:bg,color,fontSize:15,marginBottom:8,fontWeight:opt===card.ans&&picked!==null?700:400,fontFamily:"'Newsreader',Georgia,serif"}}>
-              {opt}
+              style={{display:"block",width:"100%",textAlign:"left",padding:"12px 14px",borderRadius:12,border:`1.5px solid ${border}`,background:bg,color,fontSize:15,marginBottom:8,fontWeight:opt===card.ans&&picked!==null?700:400}}>
+              <span style={{fontFamily:"'Newsreader',Georgia,serif"}}>{opt}</span>
+              {optTr&&<span style={{display:"block",fontSize:12,color:C.inkSoft,fontStyle:"italic",fontFamily:FUI,marginTop:2}}>🇪🇸 {optTr}</span>}
             </button>);
         })}
         {picked!==null&&(
@@ -1521,13 +1549,12 @@ function Verbs({registerActivity}){
             <p style={{fontSize:13,color:C.inkSoft,margin:"4px 0"}}>¿Recuerdas su conjugación? Dila en voz alta antes de voltear.</p>
           ):(
             <div className="fadein">
-              <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:10}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:10}}>
                 {[{l:"Infinitivo",v:parts[0]},{l:"Pasado",v:parts[1]},{l:"Participio",v:parts[2]}].map((p,i)=>p.v&&(
-                  <div key={i} style={{flex:1,minWidth:80,background:C.paper,borderRadius:10,padding:"8px 10px"}}>
-                    <div style={{fontSize:10,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>{p.l}</div>
-                    <div style={{fontSize:17,fontWeight:700,fontFamily:"'Newsreader',Georgia,serif",marginTop:2}}>{p.v}
-                      <button onClick={()=>speak(p.v)} style={{border:"none",background:"transparent",fontSize:14,marginLeft:4}}>🔊</button>
-                    </div>
+                  <div key={i} style={{minWidth:0,background:C.paper,borderRadius:10,padding:"8px 9px"}}>
+                    <div style={{fontSize:9,color:C.inkSoft,textTransform:"uppercase",letterSpacing:0.5}}>{p.l}</div>
+                    <div style={{fontSize:13.5,fontWeight:700,fontFamily:"'Newsreader',Georgia,serif",marginTop:3,wordBreak:"break-word",overflowWrap:"anywhere",lineHeight:1.15}}>{p.v}</div>
+                    <button onClick={()=>speak(p.v)} style={{border:"none",background:"transparent",fontSize:13,marginTop:2,padding:0}}>🔊</button>
                   </div>))}
               </div>
               {card.note&&<p style={{fontSize:12,color:C.inkSoft,marginTop:10}}>💡 {card.note}</p>}
