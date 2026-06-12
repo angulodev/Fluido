@@ -311,6 +311,16 @@ function useSpeech(){
   const stop=useCallback(()=>{try{window.speechSynthesis.cancel();}catch(e){};},[]);
   return{speak,stop,failed,supported};
 }
+function useIsDesktop(){
+  const [d,setD]=useState(()=>typeof window!=="undefined"&&window.innerWidth>=900);
+  useEffect(()=>{
+    const f=()=>setD(window.innerWidth>=900);
+    window.addEventListener("resize",f);
+    return()=>window.removeEventListener("resize",f);
+  },[]);
+  return d;
+}
+
 function AudioWarning(){
   return(
     <div style={{background:"#FFF8E1",border:"1px solid #E8C84A",borderRadius:12,padding:"10px 12px",fontSize:13,color:"#7A6310",marginTop:10}}>
@@ -326,6 +336,7 @@ function App(){
   const [state,setState]=useState(loadState);
   const [tab,setTab]=useState("home");
   const [aiReady,setAiReady]=useState(()=>isAIReady());
+  const desktop=useIsDesktop();
   const [themeVer,setThemeVer]=useState(0); // fuerza re-render al cambiar tema
 
   const save=useCallback((next)=>{setState(next);persist(next);},[]);
@@ -353,15 +364,18 @@ function App(){
   if(!state.profile) return <Shell><Onboarding onDone={profile=>save({...state,profile,level:profile.level})}/></Shell>;
 
   return(
-    <div style={{minHeight:"100vh",background:C.paper,fontFamily:FUI,color:C.ink,display:"flex",flexDirection:"column"}}>
-      <div style={{flex:1,width:"100%",maxWidth:560,margin:"0 auto",padding:"20px 16px 96px"}}>
+    <div style={{minHeight:"100vh",background:C.paper,fontFamily:FUI,color:C.ink,display:"flex"}}>
+      {desktop&&<SideNav tab={tab} setTab={setTab} name={state.profile.name}/>}
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{width:"100%",maxWidth:desktop?780:560,margin:"0 auto",padding:desktop?"36px 32px 60px":"20px 16px 96px"}}>
         {tab==="home"     && <Home     state={state} save={save} go={setTab}/>}
         {tab==="talk"     && <Talk     state={state} registerActivity={registerActivity}/>}
         {(tab==="phrases"||tab==="grammar") && <Phrases key={tab} initialMode={tab==="grammar"?"grammar":"cards"} state={state} save={save} registerActivity={registerActivity}/>}
         {tab==="listen"   && <Listen   state={state} save={save} registerActivity={registerActivity}/>}
         {tab==="settings" && <Settings state={state} save={save} onAIChanged={handleAIChanged} onThemeChange={handleThemeChange}/>}
+        </div>
       </div>
-      <TabBar tab={tab} setTab={setTab}/>
+      {!desktop&&<TabBar tab={tab} setTab={setTab}/>}
     </div>
   );
 }
@@ -556,6 +570,31 @@ function profileForPrompts(state,withName){
 }
 
 // ============================================================
+// NAVEGACIÓN LATERAL (escritorio)
+// ============================================================
+function SideNav({tab,setTab,name}){
+  const items=[{id:"home",icon:"⌂",label:"Inicio"},{id:"talk",icon:"✎",label:"Conversar"},{id:"phrases",icon:"❏",label:"Frases"},{id:"listen",icon:"♪",label:"Escuchar"},{id:"settings",icon:"⚙",label:"Ajustes"}];
+  const isActive=(id)=>tab===id||(id==="phrases"&&tab==="grammar");
+  return(
+    <aside style={{width:230,flexShrink:0,position:"sticky",top:0,height:"100vh",borderRight:`1px solid ${C.line}`,background:C.card,padding:"28px 14px 20px",display:"flex",flexDirection:"column"}}>
+      <h1 style={{fontSize:26,fontWeight:700,letterSpacing:-0.5,margin:"0 0 2px",paddingLeft:10}}>Fluido<span style={{color:C.blue}}>.</span></h1>
+      <p style={{fontSize:12,color:C.inkSoft,margin:"0 0 24px",paddingLeft:10}}>Hola, {name}</p>
+      <nav style={{display:"flex",flexDirection:"column",gap:4}}>
+        {items.map(it=>(
+          <button key={it.id} onClick={()=>setTab(it.id)}
+            style={{display:"flex",alignItems:"center",gap:12,padding:"11px 12px",borderRadius:12,border:"none",textAlign:"left",fontSize:15,
+              background:isActive(it.id)?C.blueSoft:"transparent",
+              color:isActive(it.id)?C.blue:C.inkSoft,
+              fontWeight:isActive(it.id)?600:500}}>
+            <span style={{fontSize:19,width:22,textAlign:"center"}}>{it.icon}</span>{it.label}
+          </button>))}
+      </nav>
+      <div style={{marginTop:"auto",fontSize:11,color:C.inkSoft,paddingLeft:10}}>Hecho desde Chile 🇨🇱</div>
+    </aside>
+  );
+}
+
+// ============================================================
 // NAVEGACIÓN
 // ============================================================
 function TabBar({tab,setTab}){
@@ -577,6 +616,7 @@ function TabBar({tab,setTab}){
 // INICIO
 // ============================================================
 function Home({state,save,go}){
+  const desktop=useIsDesktop();
   const d=state.daily;
   const cfg=getAIConfig()||{};
   const activeProv=PROVIDERS.find(p=>p.id===cfg.active);
@@ -601,6 +641,7 @@ function Home({state,save,go}){
       </div>
       <div style={{marginTop:20}}>
         <p style={{fontSize:13,color:C.inkSoft,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Misiones de hoy</p>
+        <div style={{display:"grid",gridTemplateColumns:desktop?"1fr 1fr":"1fr",gap:desktop?10:0}}>
         {goals.map(g=>{
           const pct=Math.min(100,Math.round((g.done/g.target)*100)); const done=g.done>=g.target;
           return(
@@ -616,6 +657,7 @@ function Home({state,save,go}){
               </div>
             </button>);
         })}
+        </div>
         {allDone&&<div className="fadein" style={{background:C.greenSoft,border:`1px solid ${C.green}`,borderRadius:14,padding:14,textAlign:"center",fontWeight:600,color:C.green}}>¡Misiones completas, {state.profile.name}! Nos vemos mañana 🔥</div>}
       </div>
       <button onClick={()=>go("settings")}
@@ -1542,7 +1584,7 @@ function Vocabulary({registerActivity}){
   if(!block) return(
     <div className="fadein">
       <p style={{fontSize:14,color:C.inkSoft,marginBottom:12}}>2.921 palabras esenciales en 28 bloques. <span className="hl">Elige un tema</span> — las que marques como fáciles dejan de aparecer hasta que toque repasarlas.</p>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(165px,1fr))",gap:8}}>
         {BANK_WORDS.map(b=>{
           const due=dueOf(b);
           const done=due===0;
