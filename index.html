@@ -1390,6 +1390,8 @@ function Grammar({state, registerActivity}){
   const [total, setTotal] = useState(0);
   const [correct, setCorrect] = useState(0);
   const [tr, setTr] = useState(null);
+  const [trLoading,setTrLoading]=useState(false);
+  const [trError,setTrError]=useState(false);
   const usedRef = React.useRef(new Set());
   const isA0 = state.level==="A0";
 
@@ -1405,18 +1407,20 @@ function Grammar({state, registerActivity}){
     usedRef.current.add(globalIdx);
     const c = {...pool[idx]};
     c.shuffled = [...c.opts].sort(()=>Math.random()-0.5);
-    setCard(c); setPicked(null); setTr(null);
+    setCard(c); setPicked(null); setTr(null); setTrLoading(false); setTrError(false);
   },[]);
 
-  useEffect(()=>{
-    if(!isA0||!card) return;
+  const requestTranslation=()=>{
+    if(!card||tr||trLoading) return;
     const ck="fluido-qtr-"+(card.q||"").slice(0,40).replace(/[^a-z]/gi,"");
     try{const cached=JSON.parse(localStorage.getItem(ck)||"null");if(cached){setTr(cached);return;}}catch(e){}
+    setTrLoading(true);setTrError(false);
     askAI_JSON(
       `Traduce al espanol esta pregunta de gramatica inglesa y cada opcion.\nPregunta: "${card.q}"\nOpciones: ${JSON.stringify(card.opts)}\nDevuelve JSON: {"q":"traduccion","opts":{${card.opts.map(o=>`"${o}":"traduccion breve"`).join(",")}}}`,
       "Eres un traductor ingles-espanol."
-    ).then(data=>{setTr(data);try{localStorage.setItem(ck,JSON.stringify(data));}catch(e){}}).catch(()=>{});
-  },[card,isA0]);
+    ).then(data=>{setTr(data);try{localStorage.setItem(ck,JSON.stringify(data));}catch(e){}})
+     .catch(()=>setTrError(true)).finally(()=>setTrLoading(false));
+  };
 
   useEffect(()=>{ nextCard(); },[]);
 
@@ -1446,8 +1450,14 @@ function Grammar({state, registerActivity}){
       <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18}}>
         <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,marginBottom:8}}>Elige la opción correcta</p>
         <p style={{fontSize:19,fontWeight:600,lineHeight:1.4,marginBottom:isA0&&tr?2:8,fontFamily:"'Newsreader',Georgia,serif"}}>{card.q}</p>
-        {isA0&&tr&&tr.q&&<p style={{fontSize:14,color:C.inkSoft,fontStyle:"italic",marginBottom:10}}>🇪🇸 {tr.q}</p>}
-        {isA0&&!tr&&<p style={{fontSize:12,color:C.inkSoft,marginBottom:10}}>Traduciendo…</p>}
+        {isA0&&tr&&tr.q&&<p className="fadein" style={{fontSize:14,color:C.inkSoft,fontStyle:"italic",marginBottom:10}}>🇪🇸 {tr.q}</p>}
+        {isA0&&!tr&&picked===null&&(
+          <button onClick={requestTranslation} disabled={trLoading}
+            style={{display:"inline-flex",alignItems:"center",gap:6,marginBottom:12,padding:"7px 12px",borderRadius:999,border:`1.5px solid ${C.blue}`,background:C.blueSoft,color:C.blue,fontWeight:600,fontSize:13}}>
+            {trLoading?"Traduciendo…":"💡 Mostrar traducción"}
+          </button>
+        )}
+        {isA0&&trError&&<p style={{fontSize:12,color:C.coral,marginBottom:10}}>No pude traducir ahora. Intenta de nuevo.</p>}
         {card.shuffled.map((opt,i)=>{
           let bg=C.card, border=C.line, color=C.ink;
           if(picked!==null){
