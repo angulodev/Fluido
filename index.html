@@ -909,22 +909,21 @@ function Phrases({state,save,registerActivity,initialMode}){
     });
     setFlipped(false);registerActivity("phrases",{deck});
   };
-  const generateMore=async()=>{
+  const [showScenario,setShowScenario]=useState(false);
+  const [scenarioText,setScenarioText]=useState("");
+  const generateMore=async(scenario)=>{
     setGenerating(true);setError(null);setInfo(null);
     try{
-      const have=new Set(state.deck.map(c=>c.en.toLowerCase().trim()));
+      const need=5;
+      const scenarioPrompt=scenario?`Las frases deben ocurrir en este escenario/contexto específico: "${scenario}". `:"";
+      const arr=await askAI_JSON(`Perfil (sin nombre): ${profileForPrompts(state,false)}\n\n${scenarioPrompt}Genera ${need} frases nuevas útiles para este perfil, con dificultad de inglés ajustada EXACTAMENTE al nivel indicado en el perfil. NO repitas: ${state.deck.map(c=>c.en).slice(-40).join(" | ")}\n\nDevuelve JSON array: [{"es":"español","en":"inglés","note_es":"nota breve"}]`,
+        "Eres un profesor de inglés práctico.");
+      const newPhrases=arr.map(p=>({es:p.es,en:p.en,note_es:p.note_es||""}));
       const bank=loadBank();
-      const fromBank=bank.phrases.filter(p=>!have.has(p.en.toLowerCase().trim())).slice(0,5);
-      let newPhrases=[...fromBank];
-      if(newPhrases.length<5){
-        const need=5-newPhrases.length;
-        const arr=await askAI_JSON(`Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera ${need} frases nuevas útiles para este perfil, con dificultad de inglés ajustada EXACTAMENTE al nivel indicado en el perfil. NO repitas: ${state.deck.map(c=>c.en).slice(-40).join(" | ")}\n\nDevuelve JSON array: [{"es":"español","en":"inglés","note_es":"nota breve"}]`,
-          "Eres un profesor de inglés práctico.");
-        newPhrases=[...newPhrases,...arr.map(p=>({es:p.es,en:p.en,note_es:p.note_es||""}))];
-        bank.phrases=[...bank.phrases,...arr.map(p=>({es:p.es,en:p.en,note_es:p.note_es||""}))];
-        saveBank(bank);
-      }else{setInfo("♻️ Frases del banco local — sin costo de IA.");}
+      bank.phrases=[...bank.phrases,...newPhrases];
+      saveBank(bank);
       save({...state,deck:[...state.deck,...newPhrases.slice(0,5).map((p,i)=>({id:"g"+Date.now()+i,es:p.es,en:p.en,note:p.note_es||"",interval:0,due:0,seen:0}))]});
+      setShowScenario(false);setScenarioText("");
     }catch(e){setError(e.userMsg||"No pude conseguir frases. Intenta de nuevo.");}
     setGenerating(false);
   };
@@ -979,10 +978,25 @@ function Phrases({state,save,registerActivity,initialMode}){
           <p style={{fontSize:14,color:C.inkSoft}}>No hay tarjetas pendientes ahora.</p>
         </div>
       )}
-      <button onClick={generateMore} disabled={generating}
+      <button onClick={()=>generateMore()} disabled={generating}
         style={{width:"100%",marginTop:14,padding:14,borderRadius:14,border:`2px dashed ${C.blue}`,background:"transparent",color:C.blue,fontWeight:600,fontSize:15,opacity:generating?0.6:1}}>
-        {generating?"Buscando…":"✨ Agregar 5 frases nuevas"}
+        {generating&&!showScenario?"✨ Generando…":"✨ Agregar 5 frases nuevas"}
       </button>
+      <button onClick={()=>setShowScenario(v=>!v)} disabled={generating}
+        style={{width:"100%",marginTop:8,padding:14,borderRadius:14,border:`2px dashed ${C.green}`,background:showScenario?C.greenSoft:"transparent",color:C.green,fontWeight:600,fontSize:15,opacity:generating?0.6:1}}>
+        🎬 Generar por escenario
+      </button>
+      {showScenario&&(
+        <div className="fadein" style={{marginTop:10,display:"flex",flexDirection:"column",gap:8}}>
+          <input value={scenarioText} onChange={e=>setScenarioText(e.target.value)}
+            placeholder="Ej: pedir comida en un restaurante, entrevista de trabajo, en el aeropuerto…"
+            style={{width:"100%",padding:"12px 14px",borderRadius:12,border:`1.5px solid ${C.line}`,background:C.card,color:C.ink,fontSize:14}}/>
+          <button onClick={()=>scenarioText.trim()&&generateMore(scenarioText.trim())} disabled={generating||!scenarioText.trim()}
+            style={{width:"100%",padding:12,borderRadius:12,border:"none",background:C.green,color:"#fff",fontWeight:700,fontSize:14,opacity:(generating||!scenarioText.trim())?0.6:1}}>
+            {generating?"✨ Generando…":"Generar 5 frases de este escenario"}
+          </button>
+        </div>
+      )}
       {info&&<p style={{color:C.green,fontSize:13,marginTop:8}}>{info}</p>}
       {error&&<p style={{color:C.coral,fontSize:14,marginTop:8}}>{error}</p>}
       </div>)}
