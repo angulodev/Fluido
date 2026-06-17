@@ -1753,9 +1753,9 @@ function Vocabulary({registerActivity,state}){
     const lvl=state?.level||"B1";
     const lvlDesc={A0:"principiante absoluto, frases de 3-6 palabras, vocabulario muy básico",A2:"básico, frases de 6-10 palabras, presente y pasado simple",B1:"intermedio, frases de 10-16 palabras, tiempos variados",B2:"avanzado, frases complejas con cláusulas, registro profesional",C1:"competente, frases sofisticadas, vocabulario amplio y natural"}[lvl]||"intermedio";
     try{
-      const r=await callAIJSON(
-        \`Eres un profesor de inglés. Devuelve JSON con "examples": array de exactamente 3 objetos {en,es}.\`,
-        \`Genera 3 frases de ejemplo para la palabra "\${word.en}" (en español: "\${word.es}"). Nivel \${lvl} — \${lvlDesc}. Cada frase muestra la palabra en contexto natural. Devuelve SOLO JSON: {"examples":[{"en":"...","es":"..."},{"en":"...","es":"..."},{"en":"...","es":"..."}]}\`
+      const r=await askAI_JSON(
+        `Genera 3 frases de ejemplo para la palabra "${word.en}" (en español: "${word.es}"). Nivel ${lvl} — ${lvlDesc}. Cada frase muestra la palabra en contexto natural. Devuelve SOLO JSON: {"examples":[{"en":"...","es":"..."},{"en":"...","es":"..."},{"en":"...","es":"..."}]}`,
+        `Eres un profesor de inglés. Devuelve JSON con "examples": array de exactamente 3 objetos {en,es}.`
       );
       setExamples(r.examples||[]);
     }catch(e){setExErr(e.userMsg||"Error generando ejemplos. Revisa tu clave de IA en Ajustes.");}
