@@ -593,7 +593,7 @@ function profileForPrompts(state,withName){
 // ============================================================
 function SideNav({tab,setTab,name,level}){
   const isBasic=level==="A0"||level==="A2";
-  const items=[{id:"home",icon:"⌂",label:"Inicio"},{id:"talk",icon:"✎",label:"Conversar"},{id:"phrases",icon:isBasic?"🔠":"❏",label:isBasic?"Vocabulario":"Frases"},{id:"listen",icon:"♪",label:"Escuchar"},{id:"settings",icon:"⚙",label:"Ajustes"}];
+  const items=[{id:"home",icon:"⌂",label:"Inicio"},{id:"talk",icon:"✎",label:"Conversar"},{id:"phrases",icon:"❏",label:isBasic?"Vocabulario":"Frases"},{id:"listen",icon:"♪",label:"Escuchar"},{id:"settings",icon:"⚙",label:"Ajustes"}];
   const isActive=(id)=>tab===id||(id==="phrases"&&tab==="grammar");
   return(
     <aside style={{width:230,flexShrink:0,position:"sticky",top:0,height:"100vh",borderRight:`1px solid ${C.line}`,background:C.card,padding:"28px 14px 20px",display:"flex",flexDirection:"column"}}>
@@ -619,7 +619,7 @@ function SideNav({tab,setTab,name,level}){
 // ============================================================
 function TabBar({tab,setTab,level}){
   const isBasic=level==="A0"||level==="A2";
-  const items=[{id:"home",icon:"⌂",label:"Inicio"},{id:"talk",icon:"✎",label:"Conversar"},{id:"phrases",icon:isBasic?"🔠":"❏",label:isBasic?"Vocab":"Frases"},{id:"listen",icon:"♪",label:"Escuchar"},{id:"settings",icon:"⚙",label:"Ajustes"}];
+  const items=[{id:"home",icon:"⌂",label:"Inicio"},{id:"talk",icon:"✎",label:"Conversar"},{id:"phrases",icon:"❏",label:isBasic?"Vocab":"Frases"},{id:"listen",icon:"♪",label:"Escuchar"},{id:"settings",icon:"⚙",label:"Ajustes"}];
   return(
     <nav style={{position:"fixed",bottom:0,left:0,right:0,background:C.card,borderTop:`1px solid ${C.line}`,display:"flex",justifyContent:"center",zIndex:50}}>
       <div style={{display:"flex",width:"100%",maxWidth:560}}>
