@@ -375,7 +375,7 @@ function App(){
 
   return(
     <div style={{minHeight:"100vh",background:C.paper,fontFamily:FUI,color:C.ink,display:"flex"}}>
-      {desktop&&<SideNav tab={tab} setTab={setTab} name={state.profile.name}/>}
+      {desktop&&<SideNav tab={tab} setTab={setTab} name={state.profile.name} level={state.level}/>}
       <div style={{flex:1,minWidth:0}}>
         <div style={{width:"100%",maxWidth:desktop?780:560,margin:"0 auto",padding:desktop?"36px 32px 60px":"20px 16px 96px"}}>
         {tab==="home"     && <Home     state={state} save={save} go={setTab}/>}
@@ -385,7 +385,7 @@ function App(){
         {tab==="settings" && <Settings state={state} save={save} onAIChanged={handleAIChanged} onThemeChange={handleThemeChange}/>}
         </div>
       </div>
-      {!desktop&&<TabBar tab={tab} setTab={setTab}/>}
+      {!desktop&&<TabBar tab={tab} setTab={setTab} level={state.level}/>}
     </div>
   );
 }
@@ -591,8 +591,9 @@ function profileForPrompts(state,withName){
 // ============================================================
 // NAVEGACIÓN LATERAL (escritorio)
 // ============================================================
-function SideNav({tab,setTab,name}){
-  const items=[{id:"home",icon:"⌂",label:"Inicio"},{id:"talk",icon:"✎",label:"Conversar"},{id:"phrases",icon:"❏",label:"Frases"},{id:"listen",icon:"♪",label:"Escuchar"},{id:"settings",icon:"⚙",label:"Ajustes"}];
+function SideNav({tab,setTab,name,level}){
+  const isBasic=level==="A0"||level==="A2";
+  const items=[{id:"home",icon:"⌂",label:"Inicio"},{id:"talk",icon:"✎",label:"Conversar"},{id:"phrases",icon:isBasic?"🔠":"❏",label:isBasic?"Vocabulario":"Frases"},{id:"listen",icon:"♪",label:"Escuchar"},{id:"settings",icon:"⚙",label:"Ajustes"}];
   const isActive=(id)=>tab===id||(id==="phrases"&&tab==="grammar");
   return(
     <aside style={{width:230,flexShrink:0,position:"sticky",top:0,height:"100vh",borderRight:`1px solid ${C.line}`,background:C.card,padding:"28px 14px 20px",display:"flex",flexDirection:"column"}}>
@@ -616,8 +617,9 @@ function SideNav({tab,setTab,name}){
 // ============================================================
 // NAVEGACIÓN
 // ============================================================
-function TabBar({tab,setTab}){
-  const items=[{id:"home",icon:"⌂",label:"Inicio"},{id:"talk",icon:"✎",label:"Conversar"},{id:"phrases",icon:"❏",label:"Frases"},{id:"listen",icon:"♪",label:"Escuchar"},{id:"settings",icon:"⚙",label:"Ajustes"}];
+function TabBar({tab,setTab,level}){
+  const isBasic=level==="A0"||level==="A2";
+  const items=[{id:"home",icon:"⌂",label:"Inicio"},{id:"talk",icon:"✎",label:"Conversar"},{id:"phrases",icon:isBasic?"🔠":"❏",label:isBasic?"Vocab":"Frases"},{id:"listen",icon:"♪",label:"Escuchar"},{id:"settings",icon:"⚙",label:"Ajustes"}];
   return(
     <nav style={{position:"fixed",bottom:0,left:0,right:0,background:C.card,borderTop:`1px solid ${C.line}`,display:"flex",justifyContent:"center",zIndex:50}}>
       <div style={{display:"flex",width:"100%",maxWidth:560}}>
