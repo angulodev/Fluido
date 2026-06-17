@@ -1063,6 +1063,12 @@ function Listen({state,save,registerActivity}){
   const play=()=>{if(!exercise)return;setPlaying(true);setActiveLine(0);speak(exercise.dialogue,{rate,onLine:setActiveLine,onEnd:()=>{setPlaying(false);setActiveLine(-1);}});};
   const stopAll=()=>{stop();setPlaying(false);setActiveLine(-1);};
   const answer=i=>{if(picked!==null)return;setPicked(i);registerActivity("listen");};
+  const speakerColorFor=(dialogue)=>{
+    const speakers=[...new Set(dialogue.map(d=>d.speaker))];
+    const map={};
+    speakers.forEach((s,i)=>{map[s]=[C.blue,C.green,C.coral][i%3];});
+    return map;
+  };
 
   return(
     <div className="fadein">
@@ -1098,8 +1104,7 @@ function Listen({state,save,registerActivity}){
                 {failed&&<AudioWarning/>}
                 {exercise.dialogue.length>0 && (()=>{
                   const speakers=[...new Set(exercise.dialogue.map(d=>d.speaker))];
-                  const speakerColor={};
-                  speakers.forEach((s,i)=>{speakerColor[s]=[C.blue,C.green,C.coral][i%3];});
+                  const speakerColor=speakerColorFor(exercise.dialogue);
                   return(
                     <div style={{marginTop:14,display:"flex",flexDirection:"column",gap:6}}>
                       <div style={{display:"flex",gap:14,marginBottom:4}}>
@@ -1143,7 +1148,7 @@ function Listen({state,save,registerActivity}){
             <div className="fadein" style={{marginTop:12}}>
               {!revealed?<BigButton onClick={()=>setRevealed(true)}>Ver transcripción</BigButton>:(
                 <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18}}>
-                  {exercise.dialogue.map((d,i)=><p key={i} style={{marginBottom:8,lineHeight:1.5}}><strong style={{fontSize:13,color:C.inkSoft}}>{d.speaker}:</strong>{" "}<span style={{fontFamily:FEN,fontSize:16}}>{d.line}</span>{d.line_es&&<span style={{display:"block",fontSize:12,color:C.inkSoft,fontStyle:"italic"}}>🇪🇸 {d.line_es}</span>}</p>)}
+                  {exercise.dialogue.map((d,i)=>{const sc=speakerColorFor(exercise.dialogue);return(<p key={i} style={{marginBottom:8,lineHeight:1.5}}><strong style={{fontSize:13,color:sc[d.speaker]}}>{d.speaker}:</strong>{" "}<span style={{fontFamily:FEN,fontSize:16}}>{d.line}</span>{d.line_es&&<span style={{display:"block",fontSize:12,color:C.inkSoft,fontStyle:"italic"}}>🇪🇸 {d.line_es}</span>}</p>);})}
                   <div style={{borderTop:`1px dashed ${C.line}`,paddingTop:10,marginTop:10}}>
                     <p style={{fontSize:13,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Expresión para tu mochila</p>
                     <p style={{margin:"4px 0 0",fontFamily:FEN,fontSize:16}}><span className="hl">{exercise.key_phrase_en}</span><span style={{fontFamily:FUI,fontSize:13,color:C.inkSoft}}> — {exercise.key_phrase_es}</span></p>
@@ -1161,10 +1166,12 @@ function Listen({state,save,registerActivity}){
 function ReadOnce({dialogue}){
   const [visible,setVisible]=useState(true);
   if(!visible) return<p style={{fontSize:13,color:C.inkSoft,fontStyle:"italic"}}>Diálogo oculto. Responde la pregunta de memoria 👇</p>;
+  const speakers=[...new Set(dialogue.map(d=>d.speaker))];
+  const sc={}; speakers.forEach((s,i)=>{sc[s]=[C.blue,C.green,C.coral][i%3];});
   return(
     <div>
       <div style={{background:C.paper,borderRadius:12,padding:12}}>
-        {dialogue.map((d,i)=><p key={i} style={{marginBottom:6,lineHeight:1.5}}><strong style={{fontSize:12,color:C.inkSoft}}>{d.speaker}:</strong>{" "}<span style={{fontFamily:FEN,fontSize:15}}>{d.line}</span>{d.line_es&&<span style={{display:"block",fontSize:11,color:C.inkSoft,fontStyle:"italic"}}>🇪🇸 {d.line_es}</span>}</p>)}
+        {dialogue.map((d,i)=><p key={i} style={{marginBottom:6,lineHeight:1.5}}><strong style={{fontSize:12,color:sc[d.speaker]}}>{d.speaker}:</strong>{" "}<span style={{fontFamily:FEN,fontSize:15}}>{d.line}</span>{d.line_es&&<span style={{display:"block",fontSize:11,color:C.inkSoft,fontStyle:"italic"}}>🇪🇸 {d.line_es}</span>}</p>)}
       </div>
       <button onClick={()=>setVisible(false)} style={{width:"100%",marginTop:8,padding:10,borderRadius:10,border:`1.5px solid ${C.blue}`,background:C.blueSoft,color:C.blue,fontWeight:600,fontSize:14}}>Listo, ocultar diálogo</button>
     </div>
