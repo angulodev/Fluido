@@ -380,7 +380,7 @@ function App(){
         <div style={{width:"100%",maxWidth:desktop?780:560,margin:"0 auto",padding:desktop?"36px 32px 60px":"20px 16px 96px"}}>
         {tab==="home"     && <Home     state={state} save={save} go={setTab}/>}
         {tab==="talk"     && <Talk     state={state} registerActivity={registerActivity}/>}
-        {(tab==="phrases"||tab==="grammar") && <Phrases key={tab} initialMode={tab==="grammar"?"grammar":"cards"} state={state} save={save} registerActivity={registerActivity}/>}
+        {(tab==="phrases"||tab==="grammar") && <Phrases key={tab} initialMode={tab==="grammar"?"grammar":(tab==="phrases"&&(state.level==="A0"||state.level==="A2")?"vocab":"cards")} state={state} save={save} registerActivity={registerActivity}/>}
         {tab==="listen"   && <Listen   state={state} save={save} registerActivity={registerActivity}/>}
         {tab==="settings" && <Settings state={state} save={save} onAIChanged={handleAIChanged} onThemeChange={handleThemeChange}/>}
         </div>
