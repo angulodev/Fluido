@@ -1402,72 +1402,6 @@ function ProfileEditor({state,save,onClose}){
 // ============================================================
 // AJUSTES — con selector de tema
 // ============================================================
-function VoiceDiagnostic(){
-  const [voices,setVoices]=useState([]);
-  const [checked,setChecked]=useState(false);
-  const [testingIdx,setTestingIdx]=useState(null);
-  const supported=typeof window!=="undefined"&&"speechSynthesis" in window;
-
-  const refresh=()=>{
-    if(!supported){setChecked(true);return;}
-    const all=window.speechSynthesis.getVoices();
-    const en=all.filter(v=>v.lang?.toLowerCase().startsWith("en"));
-    setVoices(en);setChecked(true);
-  };
-  useEffect(()=>{
-    if(!supported)return;
-    refresh();
-    window.speechSynthesis.onvoiceschanged=refresh;
-    const t=setTimeout(refresh,800);
-    return()=>clearTimeout(t);
-  },[]);
-
-  const testVoice=(v,i,pitch)=>{
-    if(!supported)return;
-    setTestingIdx(i);
-    window.speechSynthesis.cancel();
-    const u=new SpeechSynthesisUtterance("Hello! This is how I sound.");
-    u.voice=v; u.lang=v.lang||"en-US"; u.rate=1; u.pitch=pitch??1;
-    u.onend=()=>setTestingIdx(null);
-    u.onerror=()=>setTestingIdx(null);
-    window.speechSynthesis.speak(u);
-  };
-
-  return(
-    <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:14}}>
-      <p style={{fontWeight:600,marginBottom:4}}>🔊 Voces de audio instaladas</p>
-      <p style={{fontSize:13,color:C.inkSoft,marginBottom:12}}>Si en "Escuchar" los diálogos suenan con la misma voz, aquí ves cuántas detecta tu navegador.</p>
-      {!supported&&<p style={{fontSize:13,color:C.coral}}>Tu navegador no soporta síntesis de voz.</p>}
-      {supported&&!checked&&<p style={{fontSize:13,color:C.inkSoft}}>Revisando…</p>}
-      {supported&&checked&&voices.length===0&&(
-        <p style={{fontSize:13,color:C.coral}}>No se detectó ninguna voz en inglés. Instala una desde Ajustes del sistema → Accesibilidad / Idiomas → Salida de texto a voz.</p>
-      )}
-      {supported&&checked&&voices.length>0&&(
-        <>
-          <p style={{fontSize:13,marginBottom:10}}>
-            Se detectaron <strong style={{color:voices.length>1?C.green:C.coral}}>{voices.length} {voices.length===1?"voz":"voces"}</strong> en inglés.
-            {voices.length===1&&" Con solo una voz, los diálogos de \"Escuchar\" sonarán todos igual — usa el indicador de color para distinguir quién habla."}
-          </p>
-          <div style={{display:"flex",flexDirection:"column",gap:6}}>
-            {voices.map((v,i)=>(
-              <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"8px 10px",borderRadius:10,background:C.bg,border:`1px solid ${C.line}`}}>
-                <div style={{minWidth:0}}>
-                  <p style={{fontSize:13,fontWeight:600,margin:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{v.name}</p>
-                  <p style={{fontSize:11,color:C.inkSoft,margin:0}}>{v.lang}</p>
-                </div>
-                <button onClick={()=>testVoice(v,i,1)} disabled={testingIdx!==null}
-                  style={{flexShrink:0,padding:"6px 12px",borderRadius:8,border:`1.5px solid ${C.blue}`,background:testingIdx===i?C.blueSoft:"transparent",color:C.blue,fontWeight:600,fontSize:12,opacity:testingIdx!==null&&testingIdx!==i?0.5:1}}>
-                  {testingIdx===i?"▶ Sonando…":"Probar"}
-                </button>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-      <button onClick={refresh} style={{marginTop:10,border:"none",background:"transparent",color:C.inkSoft,fontSize:12,textDecoration:"underline"}}>↻ Revisar de nuevo</button>
-    </div>
-  );
-}
 function Settings({state,save,onAIChanged,onThemeChange}){
   const [expanded,setExpanded]=useState(null);
   const [editKeys,setEditKeys]=useState({});
@@ -1552,9 +1486,6 @@ function Settings({state,save,onAIChanged,onThemeChange}){
           })}
         </div>
       </div>
-
-      {/* --- VOCES DE AUDIO --- */}
-      <VoiceDiagnostic/>
 
       {/* --- NIVEL --- */}
       <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:14}}>
