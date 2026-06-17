@@ -1770,6 +1770,8 @@ function Grammar({state, registerActivity}){
   };
   const allowedLevels = LEVELS_FOR[state.level] || ["A2","B1"];
 
+  const [genStatus, setGenStatus] = useState(null); // null | "needed" | "loading" | "done" | "error"
+
   const nextCard = useCallback(()=>{
     initInglesBank();
     const bank = loadBank();
@@ -1785,7 +1787,33 @@ function Grammar({state, registerActivity}){
     const c = {...pool[idx]};
     c.shuffled = [...c.opts].sort(()=>Math.random()-0.5);
     setCard(c); setPicked(null); setTrMap({}); setTrLoad({});
+
+    // Si el usuario es B2+ y casi no hay preguntas de su nivel exacto, ofrecer generar más con IA.
+    if(["B2","C1","C2"].includes(state.level)){
+      const exact = (bank.grammar||[]).filter(g=>g.lvl===state.level).length;
+      setGenStatus(prev => exact < 8 ? "needed" : (prev==="needed" ? null : prev));
+    } else {
+      setGenStatus(null);
+    }
   },[state.level]);
+
+  const generateMoreForLevel = async()=>{
+    setGenStatus("loading");
+    try{
+      const lvl = state.level;
+      const arr = await askAI_JSON(
+        `Genera 12 preguntas de gramática inglesa tipo opción múltiple, EXACTAMENTE de nivel ${lvl} según este criterio: ${levelInstruction(state)}\n\nVaría los temas gramaticales (no repitas la misma estructura en todas). Cada pregunta debe tener 4 opciones, solo una correcta. El "hint" es una explicación breve en español de la regla.\n\nDevuelve SOLO JSON array: [{"q":"oración con ___ para completar, o pregunta directa","opts":["op1","op2","op3","op4"],"ans":"la opción correcta exacta","hint":"explicación breve en español"}]`,
+        "Eres un profesor de inglés experto en diseñar ejercicios de gramática para niveles avanzados."
+      );
+      const withLvl = arr.map(q=>({...q, lvl}));
+      const bank = loadBank();
+      bank.grammar = [...(bank.grammar||[]), ...withLvl];
+      saveBank(bank);
+      setGenStatus("done");
+      usedRef.current.clear();
+      nextCard();
+    }catch(e){ setGenStatus("error"); }
+  };
 
   const translateOne=(slot,text)=>{
     if(trMap[slot]||trLoad[slot]) return;
@@ -1820,6 +1848,16 @@ function Grammar({state, registerActivity}){
 
   return(
     <div className="fadein">
+      {genStatus==="needed"&&(
+        <div className="fadein" style={{background:C.blueSoft,border:`1px solid ${C.blue}`,borderRadius:14,padding:14,marginBottom:14}}>
+          <p style={{fontSize:13,color:C.ink,marginBottom:8}}>Quedan pocas preguntas de nivel {state.level} en el banco. ¿Genero más con IA?</p>
+          <button onClick={generateMoreForLevel} style={{padding:"8px 14px",borderRadius:10,border:"none",background:C.blue,color:"#fff",fontWeight:600,fontSize:13}}>
+            ✨ Generar 12 preguntas {state.level}
+          </button>
+        </div>
+      )}
+      {genStatus==="loading"&&<p style={{fontSize:13,color:C.inkSoft,marginBottom:14}}>Generando preguntas de nivel {state.level}…</p>}
+      {genStatus==="error"&&<p style={{fontSize:13,color:C.coral,marginBottom:14}}>No pude generar preguntas nuevas. Intenta de nuevo desde Ajustes si tu clave de IA está bien configurada.</p>}
       {total>0&&<div style={{display:"flex",gap:10,marginBottom:14,fontSize:13,color:C.inkSoft}}>
         <span>Respondidas: {total}</span>
         <span style={{color:C.green}}>✓ {correct}</span>
