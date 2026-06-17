@@ -309,17 +309,22 @@ function useSpeech(){
     try{
       synth.cancel(); synth.resume();
       const arr=Array.isArray(lines)?lines:[{line:lines}];
-      const speakerVoice={}; let nextVoiceIdx=0;
-      const voiceFor=(speaker)=>{
-        if(!voices.length) return undefined;
+      const PITCHES=[1.0,0.78,1.25,0.92]; // alterna grave/agudo para distinguir personajes aunque la voz base sea la misma
+      const speakerVoice={}; const speakerPitch={}; let nextIdx=0;
+      const assignFor=(speaker)=>{
         const key=speaker||"_default";
-        if(!(key in speakerVoice)){speakerVoice[key]=voices[nextVoiceIdx%Math.min(4,voices.length)];nextVoiceIdx++;}
-        return speakerVoice[key];
+        if(!(key in speakerPitch)){
+          if(voices.length) speakerVoice[key]=voices[nextIdx%Math.min(4,voices.length)];
+          speakerPitch[key]=PITCHES[nextIdx%PITCHES.length];
+          nextIdx++;
+        }
+        return {voice:speakerVoice[key],pitch:speakerPitch[key]};
       };
       arr.forEach((d,i)=>{
         const u=new SpeechSynthesisUtterance(d.line||d); u.lang="en-US"; u.rate=rate;
-        const v=voiceFor(d.speaker);
-        if(v) u.voice=v;
+        const {voice,pitch}=assignFor(d.speaker);
+        if(voice) u.voice=voice;
+        u.pitch=pitch;
         u.onstart=()=>onLine&&onLine(i);
         if(i===arr.length-1&&onEnd) u.onend=onEnd;
         synth.speak(u);
@@ -1300,12 +1305,12 @@ function VoiceDiagnostic(){
     return()=>clearTimeout(t);
   },[]);
 
-  const testVoice=(v,i)=>{
+  const testVoice=(v,i,pitch)=>{
     if(!supported)return;
     setTestingIdx(i);
     window.speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance("Hello! This is how I sound.");
-    u.voice=v; u.lang=v.lang||"en-US"; u.rate=1;
+    u.voice=v; u.lang=v.lang||"en-US"; u.rate=1; u.pitch=pitch??1;
     u.onend=()=>setTestingIdx(null);
     u.onerror=()=>setTestingIdx(null);
     window.speechSynthesis.speak(u);
@@ -1314,7 +1319,7 @@ function VoiceDiagnostic(){
   return(
     <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:14}}>
       <p style={{fontWeight:600,marginBottom:4}}>🔊 Voces de audio instaladas</p>
-      <p style={{fontSize:13,color:C.inkSoft,marginBottom:12}}>Si en "Escuchar" los diálogos suenan con la misma voz, aquí ves cuántas detecta tu navegador.</p>
+      <p style={{fontSize:13,color:C.inkSoft,marginBottom:12}}>Si en "Escuchar" los diálogos suenan parecidos, la app ahora combina tus voces con tono grave/agudo para distinguir personajes.</p>
       {!supported&&<p style={{fontSize:13,color:C.coral}}>Tu navegador no soporta síntesis de voz.</p>}
       {supported&&!checked&&<p style={{fontSize:13,color:C.inkSoft}}>Revisando…</p>}
       {supported&&checked&&voices.length===0&&(
@@ -1324,8 +1329,18 @@ function VoiceDiagnostic(){
         <>
           <p style={{fontSize:13,marginBottom:10}}>
             Se detectaron <strong style={{color:voices.length>1?C.green:C.coral}}>{voices.length} voz{voices.length===1?"":"es"}</strong> en inglés.
-            {voices.length===1&&" Con solo una voz, los diálogos de \"Escuchar\" sonarán todos igual — usa el indicador de color para distinguir quién habla."}
+            {voices.length===1&&" Con solo una, los diálogos varían el tono (grave/agudo) para sonar distinto entre personajes."}
           </p>
+          <div style={{display:"flex",gap:8,marginBottom:12}}>
+            <button onClick={()=>testVoice(voices[0],"demoA",1.0)} disabled={testingIdx!==null}
+              style={{flex:1,padding:"10px 6px",borderRadius:10,border:`1.5px solid ${C.blue}`,background:testingIdx==="demoA"?C.blueSoft:"transparent",color:C.blue,fontWeight:600,fontSize:12}}>
+              {testingIdx==="demoA"?"▶ Persona A…":"🔵 Probar Persona A"}
+            </button>
+            <button onClick={()=>testVoice(voices[0],"demoB",0.78)} disabled={testingIdx!==null}
+              style={{flex:1,padding:"10px 6px",borderRadius:10,border:`1.5px solid ${C.green}`,background:testingIdx==="demoB"?C.greenSoft:"transparent",color:C.green,fontWeight:600,fontSize:12}}>
+              {testingIdx==="demoB"?"▶ Persona B…":"🟢 Probar Persona B"}
+            </button>
+          </div>
           <div style={{display:"flex",flexDirection:"column",gap:6}}>
             {voices.map((v,i)=>(
               <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"8px 10px",borderRadius:10,background:C.bg,border:`1px solid ${C.line}`}}>
@@ -1333,7 +1348,7 @@ function VoiceDiagnostic(){
                   <p style={{fontSize:13,fontWeight:600,margin:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{v.name}</p>
                   <p style={{fontSize:11,color:C.inkSoft,margin:0}}>{v.lang}</p>
                 </div>
-                <button onClick={()=>testVoice(v,i)} disabled={testingIdx!==null}
+                <button onClick={()=>testVoice(v,i,1)} disabled={testingIdx!==null}
                   style={{flexShrink:0,padding:"6px 12px",borderRadius:8,border:`1.5px solid ${C.blue}`,background:testingIdx===i?C.blueSoft:"transparent",color:C.blue,fontWeight:600,fontSize:12,opacity:testingIdx!==null&&testingIdx!==i?0.5:1}}>
                   {testingIdx===i?"▶ Sonando…":"Probar"}
                 </button>
