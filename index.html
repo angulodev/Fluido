@@ -17,7 +17,9 @@
 <style>
   * { box-sizing: border-box; margin: 0; }
   button { font-family: 'Lexend', system-ui, sans-serif; cursor: pointer; color: inherit; }
-  textarea, input, select { font-family: 'Lexend', system-ui, sans-serif; }
+  textarea, input, select { font-family: 'Lexend', system-ui, sans-serif; color-scheme: dark; }
+  textarea, input[type="text"], input[type="password"] { background: var(--card, #1B2A3D); color: var(--ink, #F7F9FB); caret-color: var(--blue, #2D6CDF); }
+  textarea::placeholder, input::placeholder { color: var(--ink-soft, #8B9DB5); opacity: 0.7; }
   body { background: var(--paper, #F7F9FB); color: var(--ink, #13243B); }
   .hl  { background: var(--marker); padding: 1px 5px; border-radius: 4px; color: #1E293B !important; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
   .hl-red   { background: #FDEDEA; text-decoration: line-through; text-decoration-color: #B91C1C; padding: 1px 5px; border-radius: 4px; color: #7F1D1D !important; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
@@ -77,6 +79,7 @@ function applyCSSVars(id) {
   r.style.setProperty("--paper",  colors.paper);
   r.style.setProperty("--ink",    colors.ink);
   r.style.setProperty("--card",   colors.card);
+  r.style.setProperty("--ink-soft", colors.inkSoft);
   r.style.setProperty("--line",   colors.line);
   document.body.style.background = colors.paper;
   document.body.style.color      = colors.ink;
