@@ -1870,10 +1870,11 @@ function Vocabulary({registerActivity,state}){
   const [examples,setExamples]=useState(null);
   const [loadingEx,setLoadingEx]=useState(false);
   const [exErr,setExErr]=useState(null);
+  const [revealedEx,setRevealedEx]=useState({});
   const {speak}=useSpeech();
 
   const genExamples=async(word)=>{
-    setExamples(null);setExErr(null);setLoadingEx(true);
+    setExamples(null);setExErr(null);setLoadingEx(true);setRevealedEx({});
     const lvl=state?.level||"B1";
     const lvlDesc={A0:"principiante absoluto, frases de 3-6 palabras, vocabulario muy básico",A2:"básico, frases de 6-10 palabras, presente y pasado simple",B1:"intermedio, frases de 10-16 palabras, tiempos variados",B2:"avanzado, frases complejas con cláusulas, registro profesional",C1:"competente, frases sofisticadas, vocabulario amplio y natural"}[lvl]||"intermedio";
     try{
@@ -1999,12 +2000,26 @@ function Vocabulary({registerActivity,state}){
               {exErr&&<p style={{fontSize:12,color:C.coral,marginTop:8,textAlign:"center"}}>{exErr}</p>}
               {examples&&(
                 <div className="fadein" style={{marginTop:12,display:"flex",flexDirection:"column",gap:8}}>
-                  {examples.map((ex,i)=>(
-                    <div key={i} style={{background:C.bg,border:`1px solid ${C.line}`,borderRadius:12,padding:"10px 14px"}}>
-                      <p style={{margin:0,fontFamily:"Newsreader,Georgia,serif",fontSize:15,fontWeight:600,color:C.ink,lineHeight:1.4}}>{ex.en}</p>
-                      <p style={{margin:"4px 0 0",fontSize:13,color:C.inkSoft,lineHeight:1.4}}>{ex.es}</p>
-                    </div>
-                  ))}
+                  {examples.map((ex,i)=>{
+                    const isA0=state?.level==="A0";
+                    const shown=isA0||revealedEx[i];
+                    return(
+                      <div key={i} style={{background:C.bg,border:`1px solid ${C.line}`,borderRadius:12,padding:"10px 14px"}}>
+                        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
+                          <p style={{margin:0,fontFamily:"Newsreader,Georgia,serif",fontSize:15,fontWeight:600,color:C.ink,lineHeight:1.4,flex:1}}>{ex.en}</p>
+                          <button onClick={()=>speak(ex.en)} aria-label="Escuchar" style={{border:"none",background:"transparent",fontSize:17,flexShrink:0,lineHeight:1}}>🔊</button>
+                        </div>
+                        {shown?(
+                          <p style={{margin:"4px 0 0",fontSize:13,color:C.inkSoft,lineHeight:1.4}}>{ex.es}</p>
+                        ):(
+                          <button onClick={()=>setRevealedEx(r=>({...r,[i]:true}))}
+                            style={{marginTop:6,border:"none",background:"transparent",color:C.blue,fontSize:12,textDecoration:"underline",padding:0}}>
+                            Ver traducción
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               </>
