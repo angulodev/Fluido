@@ -944,7 +944,7 @@ function Phrases({state,save,registerActivity,initialMode}){
       </div>
       {mode==="grammar" && <Grammar state={state} registerActivity={registerActivity}/>}
       {mode==="verbs"   && <Verbs registerActivity={registerActivity} state={state}/>}
-      {mode==="vocab"   && <Vocabulary registerActivity={registerActivity}/>}
+      {mode==="vocab"   && <Vocabulary registerActivity={registerActivity} state={state}/>}
       {mode==="cards" && (<div>
       <p style={{marginBottom:14,fontSize:14,color:C.inkSoft}}>Lee el español, <span className="hl">dilo en voz alta en inglés</span>, y recién ahí voltea la tarjeta.</p>
       <div style={{display:"flex",gap:10,marginBottom:14,fontSize:13,color:C.inkSoft}}>
@@ -1723,13 +1723,30 @@ function Verbs({registerActivity,state}){
 function vocabLoadSrs(){try{return JSON.parse(localStorage.getItem("fluido-vocab-srs")||"{}");}catch(e){return{};}}
 function vocabSaveSrs(m){try{localStorage.setItem("fluido-vocab-srs",JSON.stringify(m));}catch(e){}}
 
-function Vocabulary({registerActivity}){
+function Vocabulary({registerActivity,state}){
   const [block,setBlock]=useState(null);
   const [current,setCurrent]=useState(null);
   const [flipped,setFlipped]=useState(false);
   const [showList,setShowList]=useState(false);
   const [,setTick]=useState(0);
+  const [examples,setExamples]=useState(null);
+  const [loadingEx,setLoadingEx]=useState(false);
+  const [exErr,setExErr]=useState(null);
   const {speak}=useSpeech();
+
+  const genExamples=async(word)=>{
+    setExamples(null);setExErr(null);setLoadingEx(true);
+    const lvl=state?.level||"B1";
+    const lvlDesc={A0:"principiante absoluto, frases de 3-6 palabras, vocabulario muy básico",A2:"básico, frases de 6-10 palabras, presente y pasado simple",B1:"intermedio, frases de 10-16 palabras, tiempos variados",B2:"avanzado, frases complejas con cláusulas, registro profesional",C1:"competente, frases sofisticadas, vocabulario amplio y natural"}[lvl]||"intermedio";
+    try{
+      const r=await callAIJSON(
+        \`Eres un profesor de inglés. Devuelve JSON con "examples": array de exactamente 3 objetos {en,es}.\`,
+        \`Genera 3 frases de ejemplo para la palabra "\${word.en}" (en español: "\${word.es}"). Nivel \${lvl} — \${lvlDesc}. Cada frase muestra la palabra en contexto natural. Devuelve SOLO JSON: {"examples":[{"en":"...","es":"..."},{"en":"...","es":"..."},{"en":"...","es":"..."}]}\`
+      );
+      setExamples(r.examples||[]);
+    }catch(e){setExErr(e.userMsg||"Error generando ejemplos. Revisa tu clave de IA en Ajustes.");}
+    setLoadingEx(false);
+  };
 
   const srsNow=vocabLoadSrs();
   const now=Date.now();
@@ -1830,11 +1847,29 @@ function Vocabulary({registerActivity}){
             {!flipped?(
               <BigButton onClick={()=>{setFlipped(true);speak(current.en);}}>Mostrar en inglés</BigButton>
             ):(
+              <>
               <div style={{display:"flex",gap:8,marginTop:16}}>
                 <GradeBtn color={C.coral} bg={C.coralSoft} onClick={()=>grade("again")} label="Otra vez" sub="en 10 min"/>
                 <GradeBtn color={C.blue} bg={C.blueSoft} onClick={()=>grade("good")} label="Bien" sub="días"/>
                 <GradeBtn color={C.green} bg={C.greenSoft} onClick={()=>grade("easy")} label="Fácil" sub="más días"/>
               </div>
+              <button onClick={()=>{setExamples(null);setExErr(null);genExamples(current);}}
+                disabled={loadingEx}
+                style={{marginTop:12,width:"100%",padding:"10px 0",borderRadius:12,border:`1.5px solid ${C.blue}`,background:"transparent",color:C.blue,fontWeight:600,fontSize:14,opacity:loadingEx?0.6:1}}>
+                {loadingEx?"⏳ Generando frases…":"✨ Ver frases de ejemplo"}
+              </button>
+              {exErr&&<p style={{fontSize:12,color:C.coral,marginTop:8,textAlign:"center"}}>{exErr}</p>}
+              {examples&&(
+                <div className="fadein" style={{marginTop:12,display:"flex",flexDirection:"column",gap:8}}>
+                  {examples.map((ex,i)=>(
+                    <div key={i} style={{background:C.bg,border:`1px solid ${C.line}`,borderRadius:12,padding:"10px 14px"}}>
+                      <p style={{margin:0,fontFamily:"Newsreader,Georgia,serif",fontSize:15,fontWeight:600,color:C.ink,lineHeight:1.4}}>{ex.en}</p>
+                      <p style={{margin:"4px 0 0",fontSize:13,color:C.inkSoft,lineHeight:1.4}}>{ex.es}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              </>
             )}
           </div>
         ):(
