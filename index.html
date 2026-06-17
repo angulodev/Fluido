@@ -1030,15 +1030,17 @@ function Write({state,registerActivity}){
   const [prompt,setPrompt]=useState(sv?.prompt||null);
   const [text,setText]=useState(sv?.text||"");
   const [feedback,setFeedback]=useState(sv?.feedback||null);
+  const [thread,setThread]=useState(sv?.thread||[]); // [{question_en,question_es, answer, feedback}]
   const [loadingPrompt,setLoadingPrompt]=useState(false);
   const [loadingReview,setLoadingReview]=useState(false);
+  const [loadingFollowup,setLoadingFollowup]=useState(false);
   const [error,setError]=useState(null);
   const {speak}=useSpeech();
 
-  useEffect(()=>{ writeSave({prompt,text,feedback}); },[prompt,text,feedback]);
+  useEffect(()=>{ writeSave({prompt,text,feedback,thread}); },[prompt,text,feedback,thread]);
 
   const newPrompt=async()=>{
-    setLoadingPrompt(true);setError(null);setFeedback(null);setText("");
+    setLoadingPrompt(true);setError(null);setFeedback(null);setText("");setThread([]);
     try{
       const data=await askAI_JSON(
         `Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera UNA consigna breve de escritura en inglés para este perfil, ajustada EXACTAMENTE a la complejidad del nivel indicado. Debe pedir escribir 1-3 frases sobre un tema cotidiano relacionado a sus intereses u objetivos. Varía el tema (semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve SOLO JSON: {"prompt_es":"consigna en español, breve y clara","example_hint_es":"pista corta opcional de qué incluir"}`,
@@ -1064,7 +1066,44 @@ function Write({state,registerActivity}){
     setLoadingReview(false);
   };
 
-  const tryAgain=()=>{setText("");setFeedback(null);};
+  const tryAgain=()=>{setText("");setFeedback(null);setThread([]);};
+
+  const threadContext=()=>{
+    let ctx=`Consigna original: "${prompt?.prompt_es||""}". Primera respuesta del alumno (ya corregida): "${feedback?.corrected||text}".`;
+    thread.forEach((t,i)=>{ ctx+=`\nPregunta de seguimiento ${i+1}: "${t.question_en}". Respuesta del alumno: "${t.answer}".`; });
+    return ctx;
+  };
+
+  const askFollowup=async()=>{
+    setLoadingFollowup(true);setError(null);
+    try{
+      const data=await askAI_JSON(
+        `Nivel del alumno: ${state.level}. ${threadContext()}\n\nHaz UNA pregunta de seguimiento breve en inglés, simple y natural acorde al nivel ${state.level}, relacionada al mismo tema, para que el alumno siga practicando escritura sobre lo que ya contó. No repitas preguntas anteriores.\n\nDevuelve SOLO JSON: {"question_en":"pregunta en inglés","question_es":"misma pregunta traducida al español"}`,
+        "Eres un profesor de inglés que mantiene una conversación escrita breve y motivadora con su alumno."
+      );
+      setThread(th=>[...th,{question_en:data.question_en,question_es:data.question_es,answer:"",feedback:null}]);
+    }catch(e){setError(e.userMsg||"No pude generar la siguiente pregunta. Intenta de nuevo.");}
+    setLoadingFollowup(false);
+  };
+
+  const updateThreadAnswer=(idx,val)=>{
+    setThread(th=>th.map((t,i)=>i===idx?{...t,answer:val}:t));
+  };
+
+  const submitThreadAnswer=async(idx)=>{
+    const turn=thread[idx];
+    if(!turn.answer.trim())return;
+    setLoadingReview(true);setError(null);
+    try{
+      const data=await askAI_JSON(
+        `Nivel del alumno: ${state.level}. Se le hizo esta pregunta en inglés: "${turn.question_en}". Esto es lo que respondió:\n"""${turn.answer.trim()}"""\n\nCorrige su respuesta. Sé constructivo y específico, acorde al nivel ${state.level}. Devuelve SOLO JSON: {"corrected":"versión corregida natural en inglés","errors":[{"original":"fragmento","fix":"corrección","why_es":"explicación breve en español"}],"praise_es":"algo breve que hizo bien"}`,
+        "Eres un profesor de inglés que corrige textos de alumnos con tono alentador y explicaciones claras en español."
+      );
+      setThread(th=>th.map((t,i)=>i===idx?{...t,feedback:data}:t));
+      registerActivity("write");
+    }catch(e){setError(e.userMsg||"No pude revisar tu respuesta. Intenta de nuevo.");}
+    setLoadingReview(false);
+  };
 
   return(
     <div>
@@ -1130,7 +1169,61 @@ function Write({state,registerActivity}){
                 <p style={{fontSize:13,color:C.inkSoft,marginBottom:14}}>Sin errores que corregir — ¡buen trabajo!</p>
               )}
 
-              <div style={{display:"flex",gap:8}}>
+              {/* --- HILO DE SEGUIMIENTO --- */}
+              {thread.map((t,idx)=>(
+                <div key={idx} className="fadein" style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
+                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:8}}>
+                    <div>
+                      <p style={{fontSize:11,color:C.blue,textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:2}}>Te preguntan</p>
+                      <p style={{fontFamily:"Newsreader,Georgia,serif",fontSize:16,fontWeight:600}}>{t.question_en}</p>
+                      <p style={{fontSize:12,color:C.inkSoft,fontStyle:"italic"}}>{t.question_es}</p>
+                    </div>
+                    <button onClick={()=>speak(t.question_en)} aria-label="Escuchar" style={{border:"none",background:"transparent",fontSize:17,flexShrink:0}}>🔊</button>
+                  </div>
+
+                  {!t.feedback?(
+                    <>
+                      <textarea value={t.answer} onChange={e=>updateThreadAnswer(idx,e.target.value)}
+                        placeholder="Your answer…" disabled={loadingReview}
+                        style={{width:"100%",minHeight:70,padding:"12px 14px",borderRadius:12,border:`1.5px solid ${C.line}`,background:C.bg,color:C.ink,fontFamily:"Newsreader,Georgia,serif",fontSize:16,lineHeight:1.5,resize:"vertical"}}/>
+                      <button onClick={()=>submitThreadAnswer(idx)} disabled={loadingReview||!t.answer.trim()}
+                        style={{width:"100%",marginTop:8,padding:"10px 14px",borderRadius:10,border:"none",background:C.blue,color:"#fff",fontWeight:700,fontSize:14,opacity:(loadingReview||!t.answer.trim())?0.6:1}}>
+                        {loadingReview?"Revisando…":"Corregir"}
+                      </button>
+                    </>
+                  ):(
+                    <>
+                      <div style={{background:C.greenSoft,borderRadius:12,padding:"10px 14px",marginBottom:8}}>
+                        <p style={{fontSize:11,color:C.green,textTransform:"uppercase",letterSpacing:1,marginBottom:4,fontWeight:700}}>Versión corregida</p>
+                        <p style={{fontFamily:"Newsreader,Georgia,serif",fontSize:15,fontWeight:600,color:C.ink,lineHeight:1.5}}>{t.feedback.corrected}</p>
+                      </div>
+                      {t.feedback.praise_es&&<p style={{fontSize:13,color:C.green,marginBottom:8}}>👍 {t.feedback.praise_es}</p>}
+                      {t.feedback.errors&&t.feedback.errors.length>0&&(
+                        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                          {t.feedback.errors.map((er,i)=>(
+                            <div key={i} style={{borderLeft:`3px solid ${C.coral}`,paddingLeft:10}}>
+                              <p style={{fontSize:13,margin:0}}><span style={{textDecoration:"line-through",color:C.inkSoft}}>{er.original}</span> → <strong style={{color:C.ink}}>{er.fix}</strong></p>
+                              <p style={{fontSize:12,color:C.inkSoft,margin:"2px 0 0"}}>{er.why_es}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              ))}
+
+              {error&&<p style={{fontSize:13,color:C.coral,marginTop:10}}>{error}</p>}
+
+              {/* Botón continuar conversación: solo si el último turno (o el inicial) ya tiene feedback */}
+              {(thread.length===0||thread[thread.length-1].feedback)&&(
+                <button onClick={askFollowup} disabled={loadingFollowup}
+                  style={{width:"100%",marginTop:14,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.blue}`,background:"transparent",color:C.blue,fontWeight:600,fontSize:13,opacity:loadingFollowup?0.6:1}}>
+                  {loadingFollowup?"Pensando una pregunta…":"💬 Continuar conversación"}
+                </button>
+              )}
+
+              <div style={{display:"flex",gap:8,marginTop:8}}>
                 <button onClick={tryAgain} style={{flex:1,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.line}`,background:"transparent",color:C.ink,fontWeight:600,fontSize:13}}>
                   Escribir otra vez
                 </button>
