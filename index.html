@@ -297,6 +297,60 @@ async function pingProvider(pid,key) {
 function loadBank(){try{return JSON.parse(localStorage.getItem("fluido-bank")||"null")||{phrases:[],listening:[],grammar:[],verbs:[]};}catch(e){return{phrases:[],listening:[],grammar:[],verbs:[]};}}
 function saveBank(bank){try{localStorage.setItem("fluido-bank",JSON.stringify({phrases:(bank.phrases||[]).slice(-500),listening:(bank.listening||[]).slice(-150),grammar:(bank.grammar||[]).slice(-600),verbs:(bank.verbs||[]).slice(-400)}));}catch(e){}}
 
+// ---------- Stats de Quiz por nivel (para recomendación de nivel) ----------
+// Guarda los últimos N resultados (correcto/incorrecto) por nivel, para poder calcular
+// un % de aciertos reciente sin tener que re-jugar el quiz desde cero cada vez.
+function loadQuizStats(){try{return JSON.parse(localStorage.getItem("fluido-quiz-stats")||"null")||{};}catch(e){return{};}}
+function saveQuizStats(s){try{localStorage.setItem("fluido-quiz-stats",JSON.stringify(s));}catch(e){}}
+function recordQuizAnswer(level, isRight){
+  const stats = loadQuizStats();
+  const arr = stats[level] || [];
+  arr.push(isRight?1:0);
+  stats[level] = arr.slice(-30); // últimas 30 respuestas por nivel
+  saveQuizStats(stats);
+}
+function quizAccuracy(level){
+  const arr = (loadQuizStats()[level]) || [];
+  if(arr.length < 5) return null; // no hay suficiente data todavía
+  return Math.round((arr.reduce((a,b)=>a+b,0)/arr.length)*100);
+}
+
+// ---------- Señal de recomendación de nivel ----------
+// Combina: % de frases dominadas (deck), % de verbos dominados, y % de aciertos en el Quiz
+// del nivel actual. Devuelve una recomendación honesta: subir, bajar, o mantener — con las
+// razones detrás, en vez de que el usuario tenga que adivinar cuándo cambiar de nivel.
+function getLevelSignal(state){
+  const deck = state.deck || [];
+  const deckSeen = deck.filter(c=>(c.seen||0)>0);
+  const deckMastered = deck.filter(c=>(c.interval||0)>=7);
+  const deckPct = deckSeen.length>=5 ? Math.round((deckMastered.length/deck.length)*100) : null;
+
+  const verbSRS = getVerbSRS();
+  const verbEntries = Object.values(verbSRS);
+  const verbMastered = verbEntries.filter(v=>(v.interval||0)>=7);
+  const verbPct = verbEntries.length>=5 ? Math.round((verbMastered.length/verbEntries.length)*100) : null;
+
+  const quizPct = quizAccuracy(state.level);
+
+  const signals = [deckPct, verbPct, quizPct].filter(p=>p!==null);
+  const hasEnoughData = signals.length>=1;
+  const avg = hasEnoughData ? Math.round(signals.reduce((a,b)=>a+b,0)/signals.length) : null;
+
+  const idx = LEVELS.findIndex(l=>l.id===state.level);
+  const canGoUp = idx < LEVELS.length-1;
+  const canGoDown = idx > 0;
+
+  let recommendation = "wait"; // "up" | "down" | "stay" | "wait"
+  if(hasEnoughData){
+    if(avg>=82 && canGoUp) recommendation = "up";
+    else if(avg<40 && quizPct!==null && canGoDown) recommendation = "down";
+    else recommendation = "stay";
+  }
+
+  return { deckPct, verbPct, quizPct, avg, recommendation, hasEnoughData };
+}
+
+
 // ---------- Estado de app ----------
 const DEFAULT_STATE = {
   profile:null, level:"B1", streak:0, lastActive:null,
@@ -409,6 +463,7 @@ function App(){
         {(tab==="phrases"||tab==="grammar") && <Phrases key={tab} initialMode={tab==="grammar"?"grammar":(tab==="phrases"&&(state.level==="A0"||state.level==="A2")?"vocab":"cards")} state={state} save={save} registerActivity={registerActivity}/>}
         {tab==="listen"   && <Listen   state={state} save={save} registerActivity={registerActivity}/>}
         {tab==="write"    && <Write    state={state} registerActivity={registerActivity}/>}
+        {tab==="levelcheck" && <LevelCheck state={state} save={save} go={setTab}/>}
         {tab==="settings" && <Settings state={state} save={save} onAIChanged={handleAIChanged} onThemeChange={handleThemeChange}/>}
         </div>
       </div>
@@ -668,6 +723,7 @@ function Home({state,save,go}){
   const d=state.daily;
   const cfg=getAIConfig()||{};
   const activeProv=PROVIDERS.find(p=>p.id===cfg.active);
+  const levelSignal=getLevelSignal(state);
   const goals=[
     {id:"talk",  label:"Conversar",done:d.talk,  target:3,unit:"mensajes",desc:"Escribe en inglés en una situación real"},
     {id:"phrases",label:"Frases", done:d.phrases,target:5,unit:"tarjetas",desc:"Repasa tu mazo de frases útiles"},
@@ -708,10 +764,28 @@ function Home({state,save,go}){
         </div>
         {allDone&&<div className="fadein" style={{background:C.greenSoft,border:`1px solid ${C.green}`,borderRadius:14,padding:14,textAlign:"center",fontWeight:600,color:C.green}}>¡Misiones completas, {state.profile.name}! Nos vemos mañana 🔥</div>}
       </div>
+      {levelSignal.recommendation==="up"&&(
+        <button onClick={()=>go("levelcheck")} className="fadein"
+          style={{width:"100%",marginTop:14,display:"flex",justifyContent:"space-between",alignItems:"center",background:C.greenSoft,border:`1px solid ${C.green}`,borderRadius:14,padding:"13px 16px",textAlign:"left"}}>
+          <span style={{fontSize:13,color:C.green}}>📈 Le estás sacando partido a tu nivel — parece buen momento para subir.</span>
+          <span style={{fontSize:13,color:C.green,fontWeight:700,flexShrink:0,marginLeft:8}}>Ver →</span>
+        </button>
+      )}
+      {levelSignal.recommendation==="down"&&(
+        <button onClick={()=>go("levelcheck")} className="fadein"
+          style={{width:"100%",marginTop:14,display:"flex",justifyContent:"space-between",alignItems:"center",background:C.coralSoft,border:`1px solid ${C.coral}`,borderRadius:14,padding:"13px 16px",textAlign:"left"}}>
+          <span style={{fontSize:13,color:C.coral}}>💡 Este nivel te está costando bastante. Bajar un poco podría ayudarte a avanzar más sólido.</span>
+          <span style={{fontSize:13,color:C.coral,fontWeight:700,flexShrink:0,marginLeft:8}}>Ver →</span>
+        </button>
+      )}
       <button onClick={()=>go("settings")}
-        style={{width:"100%",marginTop:22,display:"flex",justifyContent:"space-between",alignItems:"center",background:C.card,border:`1px solid ${C.line}`,borderRadius:14,padding:"13px 16px"}}>
+        style={{width:"100%",marginTop:levelSignal.recommendation==="up"||levelSignal.recommendation==="down"?10:22,display:"flex",justifyContent:"space-between",alignItems:"center",background:C.card,border:`1px solid ${C.line}`,borderRadius:14,padding:"13px 16px"}}>
         <span style={{fontSize:14,color:C.inkSoft}}>🎯 Tu nivel: <strong style={{color:C.ink}}>{(LEVELS.find(l=>l.id===state.level)||{}).icon||""} {(LEVELS.find(l=>l.id===state.level)||{}).label||state.level}</strong></span>
         <span style={{fontSize:13,color:C.blue,fontWeight:600}}>Cambiar →</span>
+      </button>
+      <button onClick={()=>go("levelcheck")}
+        style={{width:"100%",marginTop:8,padding:"10px 0",border:"none",background:"transparent",color:C.inkSoft,fontSize:13,textDecoration:"underline"}}>
+        ¿Debería cambiar de nivel? Revisar mi progreso
       </button>
     </div>
   );
@@ -1258,6 +1332,89 @@ function Write({state,registerActivity}){
     </div>
   );
 }
+
+// ============================================================
+// CHEQUEO DE NIVEL — analiza desempeño real y recomienda subir/bajar/mantener
+// ============================================================
+function LevelBar({label,pct,note}){
+  const has = pct!==null;
+  return(
+    <div style={{marginBottom:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+        <span style={{fontSize:13,fontWeight:600}}>{label}</span>
+        <span style={{fontSize:13,color:has?C.ink:C.inkSoft}}>{has?`${pct}%`:"sin datos aún"}</span>
+      </div>
+      <div style={{height:8,background:C.paper,borderRadius:4,overflow:"hidden"}}>
+        <div style={{height:"100%",width:(has?pct:0)+"%",background:has?(pct>=70?C.green:pct>=40?C.blue:C.coral):C.line,borderRadius:4,transition:"width .3s"}}/>
+      </div>
+      {note&&<p style={{fontSize:12,color:C.inkSoft,marginTop:4}}>{note}</p>}
+    </div>
+  );
+}
+
+function LevelCheck({state,save,go}){
+  const sig = getLevelSignal(state);
+  const lvl = LEVELS.find(l=>l.id===state.level)||{};
+  const idx = LEVELS.findIndex(l=>l.id===state.level);
+  const nextLevel = idx<LEVELS.length-1 ? LEVELS[idx+1] : null;
+  const prevLevel = idx>0 ? LEVELS[idx-1] : null;
+
+  const changeLevel = (newLvl)=>{
+    save({...state, level:newLvl});
+    go("home");
+  };
+
+  return(
+    <div className="fadein">
+      <button onClick={()=>go("home")} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,marginBottom:14,padding:0}}>← Volver</button>
+      <h2 style={{fontSize:24,fontWeight:700,marginBottom:4}}>¿Debería cambiar de nivel?</h2>
+      <p style={{fontSize:14,color:C.inkSoft,marginBottom:18}}>Nivel actual: <strong style={{color:C.ink}}>{lvl.icon} {lvl.label}</strong></p>
+
+      <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:16}}>
+        <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,marginBottom:14}}>Tu desempeño reciente</p>
+        <LevelBar label="Frases dominadas (mazo)" pct={sig.deckPct} note={sig.deckPct===null?"Repasa más tarjetas en Frases para ver esta señal.":null}/>
+        <LevelBar label="Verbos dominados" pct={sig.verbPct} note={sig.verbPct===null?"Practica más en Verbos para ver esta señal.":null}/>
+        <LevelBar label={`Aciertos en Quiz (nivel ${state.level})`} pct={sig.quizPct} note={sig.quizPct===null?"Responde al menos 5 preguntas del Quiz para ver esta señal.":null}/>
+      </div>
+
+      {!sig.hasEnoughData&&(
+        <div style={{background:C.paper,border:`1px solid ${C.line}`,borderRadius:14,padding:16,textAlign:"center"}}>
+          <p style={{fontSize:14,color:C.inkSoft}}>Todavía no hay suficiente práctica para darte una recomendación confiable. Sigue usando Frases, Verbos y el Quiz — vuelve a revisar en unos días.</p>
+        </div>
+      )}
+
+      {sig.hasEnoughData&&sig.recommendation==="up"&&nextLevel&&(
+        <div className="fadein" style={{background:C.greenSoft,border:`1px solid ${C.green}`,borderRadius:14,padding:18,textAlign:"center"}}>
+          <p style={{fontWeight:700,color:C.green,marginBottom:6}}>📈 Parece buen momento para subir de nivel</p>
+          <p style={{fontSize:13,color:C.ink,marginBottom:14}}>Tu desempeño promedio es de {sig.avg}%. Esto ya no te está desafiando lo suficiente.</p>
+          <button onClick={()=>changeLevel(nextLevel.id)} style={{width:"100%",padding:"12px 0",borderRadius:12,border:"none",background:C.green,color:"#fff",fontWeight:700,fontSize:14}}>
+            Subir a {nextLevel.icon} {nextLevel.label}
+          </button>
+        </div>
+      )}
+
+      {sig.hasEnoughData&&sig.recommendation==="down"&&prevLevel&&(
+        <div className="fadein" style={{background:C.coralSoft,border:`1px solid ${C.coral}`,borderRadius:14,padding:18,textAlign:"center"}}>
+          <p style={{fontWeight:700,color:C.coral,marginBottom:6}}>💡 Este nivel te está costando bastante</p>
+          <p style={{fontSize:13,color:C.ink,marginBottom:14}}>Tu acierto en el Quiz es bajo ({sig.quizPct}%). Bajar un poco no es retroceder — es construir una base más sólida para avanzar después con más confianza.</p>
+          <button onClick={()=>changeLevel(prevLevel.id)} style={{width:"100%",padding:"12px 0",borderRadius:12,border:"none",background:C.coral,color:"#fff",fontWeight:700,fontSize:14}}>
+            Bajar a {prevLevel.icon} {prevLevel.label}
+          </button>
+        </div>
+      )}
+
+      {sig.hasEnoughData&&sig.recommendation==="stay"&&(
+        <div className="fadein" style={{background:C.blueSoft,border:`1px solid ${C.blue}`,borderRadius:14,padding:18,textAlign:"center"}}>
+          <p style={{fontWeight:700,color:C.blue,marginBottom:6}}>👍 Tu nivel actual te queda bien</p>
+          <p style={{fontSize:13,color:C.ink}}>Tu desempeño promedio es de {sig.avg}%, en el rango ideal para seguir progresando sin frustrarte ni aburrirte. Sigue así.</p>
+        </div>
+      )}
+
+      <p style={{fontSize:12,color:C.inkSoft,marginTop:18,textAlign:"center"}}>También puedes cambiar de nivel manualmente cuando quieras desde Ajustes.</p>
+    </div>
+  );
+}
+
 
 function Listen({state,save,registerActivity}){
   const sv=listenLoad();
@@ -1845,6 +2002,7 @@ function Grammar({state, registerActivity}){
     const isRight = opt === card.ans;
     setTotal(t=>t+1);
     if(isRight) setCorrect(c=>c+1);
+    recordQuizAnswer(state.level, isRight);
     registerActivity("grammar");
   };
 
