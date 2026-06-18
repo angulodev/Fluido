@@ -1301,10 +1301,15 @@ function Listen({state,save,registerActivity}){
   const play=()=>{if(!exercise)return;setPlaying(true);setActiveLine(0);speak(exercise.dialogue,{rate,onLine:setActiveLine,onEnd:()=>{setPlaying(false);setActiveLine(-1);}});};
   const stopAll=()=>{stop();setPlaying(false);setActiveLine(-1);};
   const answer=i=>{if(picked!==null)return;setPicked(i);registerActivity("listen");};
+  // Paleta fija para distinguir speakers, independiente del tema activo del usuario.
+  // No usamos C.blue/C.green/C.coral porque en algunos temas (ej. "Noche verde") el
+  // color de acento coincide exactamente con el verde o el coral, dejando a dos
+  // personajes con el mismo color.
+  const SPEAKER_PALETTE = ["#F97316","#38BDF8","#EC4899","#A3E635"]; // naranja, celeste, fucsia, lima
   const speakerColorFor=(dialogue)=>{
     const speakers=[...new Set(dialogue.map(d=>d.speaker))];
     const map={};
-    speakers.forEach((s,i)=>{map[s]=[C.blue,C.green,C.coral][i%3];});
+    speakers.forEach((s,i)=>{map[s]=SPEAKER_PALETTE[i%SPEAKER_PALETTE.length];});
     return map;
   };
 
