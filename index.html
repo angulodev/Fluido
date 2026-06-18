@@ -297,42 +297,39 @@ async function pingProvider(pid,key) {
 function loadBank(){try{return JSON.parse(localStorage.getItem("fluido-bank")||"null")||{phrases:[],listening:[],grammar:[],verbs:[]};}catch(e){return{phrases:[],listening:[],grammar:[],verbs:[]};}}
 function saveBank(bank){try{localStorage.setItem("fluido-bank",JSON.stringify({phrases:(bank.phrases||[]).slice(-500),listening:(bank.listening||[]).slice(-150),grammar:(bank.grammar||[]).slice(-600),verbs:(bank.verbs||[]).slice(-400)}));}catch(e){}}
 
-// ---------- Stats de Quiz por nivel (para recomendación de nivel) ----------
-// Guarda los últimos N resultados (correcto/incorrecto) por nivel, para poder calcular
-// un % de aciertos reciente sin tener que re-jugar el quiz desde cero cada vez.
-function loadQuizStats(){try{return JSON.parse(localStorage.getItem("fluido-quiz-stats")||"null")||{};}catch(e){return{};}}
-function saveQuizStats(s){try{localStorage.setItem("fluido-quiz-stats",JSON.stringify(s));}catch(e){}}
-function recordQuizAnswer(level, isRight){
-  const stats = loadQuizStats();
-  const arr = stats[level] || [];
+// ---------- Stats de desempeño por módulo y nivel (para recomendación de nivel) ----------
+// Guarda los últimos N resultados (acierto/error) por módulo+nivel, para poder calcular
+// un % de desempeño reciente. Solo se registran señales de PRODUCCIÓN/COMPRENSIÓN evaluada
+// por IA o por respuesta correcta — no "haber visto" una tarjeta, que no dice nada del dominio real.
+function loadPerfStats(){try{return JSON.parse(localStorage.getItem("fluido-perf-stats")||"null")||{};}catch(e){return{};}}
+function savePerfStats(s){try{localStorage.setItem("fluido-perf-stats",JSON.stringify(s));}catch(e){}}
+function recordPerf(module, level, isRight){
+  const stats = loadPerfStats();
+  const key = module+":"+level;
+  const arr = stats[key] || [];
   arr.push(isRight?1:0);
-  stats[level] = arr.slice(-30); // últimas 30 respuestas por nivel
-  saveQuizStats(stats);
+  stats[key] = arr.slice(-30); // últimos 30 resultados por módulo+nivel
+  savePerfStats(stats);
 }
-function quizAccuracy(level){
-  const arr = (loadQuizStats()[level]) || [];
+function perfAccuracy(module, level){
+  const arr = (loadPerfStats()[module+":"+level]) || [];
   if(arr.length < 5) return null; // no hay suficiente data todavía
   return Math.round((arr.reduce((a,b)=>a+b,0)/arr.length)*100);
 }
+function recordQuizAnswer(level, isRight){ recordPerf("quiz", level, isRight); }
+function quizAccuracy(level){ return perfAccuracy("quiz", level); }
 
 // ---------- Señal de recomendación de nivel ----------
-// Combina: % de frases dominadas (deck), % de verbos dominados, y % de aciertos en el Quiz
-// del nivel actual. Devuelve una recomendación honesta: subir, bajar, o mantener — con las
-// razones detrás, en vez de que el usuario tenga que adivinar cuándo cambiar de nivel.
+// Combina desempeño real (evaluado por IA o respuesta correcta, no "haber visto") en:
+// Escuchar (comprensión), Conversar (producción oral corregida), Escribir (producción escrita
+// corregida) y Quiz de gramática. Devuelve una recomendación honesta: subir, bajar, o mantener.
 function getLevelSignal(state){
-  const deck = state.deck || [];
-  const deckSeen = deck.filter(c=>(c.seen||0)>0);
-  const deckMastered = deck.filter(c=>(c.interval||0)>=7);
-  const deckPct = deckSeen.length>=5 ? Math.round((deckMastered.length/deck.length)*100) : null;
+  const listenPct = perfAccuracy("listen", state.level);
+  const talkPct   = perfAccuracy("talk",   state.level);
+  const writePct  = perfAccuracy("write",  state.level);
+  const quizPct   = perfAccuracy("quiz",   state.level);
 
-  const verbSRS = getVerbSRS();
-  const verbEntries = Object.values(verbSRS);
-  const verbMastered = verbEntries.filter(v=>(v.interval||0)>=7);
-  const verbPct = verbEntries.length>=5 ? Math.round((verbMastered.length/verbEntries.length)*100) : null;
-
-  const quizPct = quizAccuracy(state.level);
-
-  const signals = [deckPct, verbPct, quizPct].filter(p=>p!==null);
+  const signals = [listenPct, talkPct, writePct, quizPct].filter(p=>p!==null);
   const hasEnoughData = signals.length>=1;
   const avg = hasEnoughData ? Math.round(signals.reduce((a,b)=>a+b,0)/signals.length) : null;
 
@@ -343,11 +340,11 @@ function getLevelSignal(state){
   let recommendation = "wait"; // "up" | "down" | "stay" | "wait"
   if(hasEnoughData){
     if(avg>=82 && canGoUp) recommendation = "up";
-    else if(avg<40 && quizPct!==null && canGoDown) recommendation = "down";
+    else if(avg<40 && canGoDown) recommendation = "down";
     else recommendation = "stay";
   }
 
-  return { deckPct, verbPct, quizPct, avg, recommendation, hasEnoughData };
+  return { listenPct, talkPct, writePct, quizPct, avg, recommendation, hasEnoughData };
 }
 
 
@@ -873,6 +870,7 @@ function Talk({state,registerActivity}){
         "Eres un coach de inglés cálido y preciso. Corriges sin desanimar.");
       setMessages(m=>{const c=[...m];c[c.length-1]={...myMsg,feedback:data};return[...c,{role:"them",text:data.reply_en,es:data.reply_es||null}];});
       if(voiceMode) setTimeout(()=>speak(data.reply_en),300);
+      recordPerf("talk", state.level, !(data.errors&&data.errors.length>0));
       registerActivity("talk");
     }catch(e){setError(e.userMsg||"Problema al enviar. Intenta de nuevo.");setMessages(m=>m.slice(0,-1));setInput(text);}
     setLoading(false);
@@ -1155,6 +1153,7 @@ function Write({state,registerActivity}){
         "Eres un profesor de inglés que corrige textos de alumnos con tono alentador y explicaciones claras en español."
       );
       setFeedback(data);
+      recordPerf("write", lvl, !(data.errors&&data.errors.length>0));
       registerActivity("write");
     }catch(e){setError(e.userMsg||"No pude revisar tu texto. Intenta de nuevo.");}
     setLoadingReview(false);
@@ -1194,6 +1193,7 @@ function Write({state,registerActivity}){
         "Eres un profesor de inglés que corrige textos de alumnos con tono alentador y explicaciones claras en español."
       );
       setThread(th=>th.map((t,i)=>i===idx?{...t,feedback:data}:t));
+      recordPerf("write", state.level, !(data.errors&&data.errors.length>0));
       registerActivity("write");
     }catch(e){setError(e.userMsg||"No pude revisar tu respuesta. Intenta de nuevo.");}
     setLoadingReview(false);
@@ -1371,15 +1371,16 @@ function LevelCheck({state,save,go}){
       <p style={{fontSize:14,color:C.inkSoft,marginBottom:18}}>Nivel actual: <strong style={{color:C.ink}}>{lvl.icon} {lvl.label}</strong></p>
 
       <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:16}}>
-        <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,marginBottom:14}}>Tu desempeño reciente</p>
-        <LevelBar label="Frases dominadas (mazo)" pct={sig.deckPct} note={sig.deckPct===null?"Repasa más tarjetas en Frases para ver esta señal.":null}/>
-        <LevelBar label="Verbos dominados" pct={sig.verbPct} note={sig.verbPct===null?"Practica más en Verbos para ver esta señal.":null}/>
-        <LevelBar label={`Aciertos en Quiz (nivel ${state.level})`} pct={sig.quizPct} note={sig.quizPct===null?"Responde al menos 5 preguntas del Quiz para ver esta señal.":null}/>
+        <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,marginBottom:14}}>Tu desempeño reciente (nivel {state.level})</p>
+        <LevelBar label="Comprensión auditiva (Escuchar)" pct={sig.listenPct} note={sig.listenPct===null?"Responde al menos 5 ejercicios en Escuchar para ver esta señal.":null}/>
+        <LevelBar label="Producción oral (Conversar)" pct={sig.talkPct} note={sig.talkPct===null?"Envía al menos 5 mensajes en Conversar para ver esta señal.":null}/>
+        <LevelBar label="Producción escrita (Escribir)" pct={sig.writePct} note={sig.writePct===null?"Corrige al menos 5 textos en Escribir para ver esta señal.":null}/>
+        <LevelBar label="Aciertos en Quiz de gramática" pct={sig.quizPct} note={sig.quizPct===null?"Responde al menos 5 preguntas del Quiz para ver esta señal.":null}/>
       </div>
 
       {!sig.hasEnoughData&&(
         <div style={{background:C.paper,border:`1px solid ${C.line}`,borderRadius:14,padding:16,textAlign:"center"}}>
-          <p style={{fontSize:14,color:C.inkSoft}}>Todavía no hay suficiente práctica para darte una recomendación confiable. Sigue usando Frases, Verbos y el Quiz — vuelve a revisar en unos días.</p>
+          <p style={{fontSize:14,color:C.inkSoft}}>Todavía no hay suficiente práctica para darte una recomendación confiable. Sigue usando Escuchar, Conversar, Escribir y el Quiz — vuelve a revisar en unos días.</p>
         </div>
       )}
 
@@ -1396,7 +1397,7 @@ function LevelCheck({state,save,go}){
       {sig.hasEnoughData&&sig.recommendation==="down"&&prevLevel&&(
         <div className="fadein" style={{background:C.coralSoft,border:`1px solid ${C.coral}`,borderRadius:14,padding:18,textAlign:"center"}}>
           <p style={{fontWeight:700,color:C.coral,marginBottom:6}}>💡 Este nivel te está costando bastante</p>
-          <p style={{fontSize:13,color:C.ink,marginBottom:14}}>Tu acierto en el Quiz es bajo ({sig.quizPct}%). Bajar un poco no es retroceder — es construir una base más sólida para avanzar después con más confianza.</p>
+          <p style={{fontSize:13,color:C.ink,marginBottom:14}}>Tu desempeño promedio es de {sig.avg}%. Bajar un poco no es retroceder — es construir una base más sólida para avanzar después con más confianza.</p>
           <button onClick={()=>changeLevel(prevLevel.id)} style={{width:"100%",padding:"12px 0",borderRadius:12,border:"none",background:C.coral,color:"#fff",fontWeight:700,fontSize:14}}>
             Bajar a {prevLevel.icon} {prevLevel.label}
           </button>
@@ -1457,7 +1458,7 @@ function Listen({state,save,registerActivity}){
   };
   const play=()=>{if(!exercise)return;setPlaying(true);setActiveLine(0);speak(exercise.dialogue,{rate,onLine:setActiveLine,onEnd:()=>{setPlaying(false);setActiveLine(-1);}});};
   const stopAll=()=>{stop();setPlaying(false);setActiveLine(-1);};
-  const answer=i=>{if(picked!==null)return;setPicked(i);registerActivity("listen");};
+  const answer=i=>{if(picked!==null)return;setPicked(i);recordPerf("listen", state.level, i===exercise.correct_index);registerActivity("listen");};
   // Paleta fija para distinguir speakers, independiente del tema activo del usuario.
   // No usamos C.blue/C.green/C.coral porque en algunos temas (ej. "Noche verde") el
   // color de acento coincide exactamente con el verde o el coral, dejando a dos
