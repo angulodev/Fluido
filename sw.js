@@ -1,5 +1,14 @@
-const CACHE = "fluido-v1";
-self.addEventListener("install", e => self.skipWaiting());
+const CACHE = "fluido-v2";
+const CORE = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
+
+self.addEventListener("install", e => {
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => c.addAll(CORE))
+      .then(() => self.skipWaiting())
+  );
+});
+
 self.addEventListener("activate", e => {
   e.waitUntil(
     caches.keys()
@@ -7,6 +16,7 @@ self.addEventListener("activate", e => {
       .then(() => self.clients.claim())
   );
 });
+
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
   e.respondWith(
@@ -16,6 +26,10 @@ self.addEventListener("fetch", e => {
         caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
         return res;
       })
-      .catch(() => caches.match(e.request))
+      .catch(() =>
+        caches.match(e.request).then(hit =>
+          hit || (e.request.mode === "navigate" ? caches.match("./index.html") : undefined)
+        )
+      )
   );
 });
