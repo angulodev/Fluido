@@ -1286,12 +1286,17 @@ const LISTEN_TOPICS=[
 ];
 function recentTopics(){try{return JSON.parse(localStorage.getItem("fluido-listen-topics")||"[]");}catch(e){return[];}}
 function pushRecentTopic(id){try{const r=[...recentTopics(),id].slice(-10);localStorage.setItem("fluido-listen-topics",JSON.stringify(r));}catch(e){}}
-function pickListenTopic(){
+function pickListenTopic(extra){
+  const all=[...LISTEN_TOPICS,...(extra||[])];
   const recent=new Set(recentTopics());
-  const pool=LISTEN_TOPICS.filter(t=>!recent.has(t.id));
-  const src=pool.length?pool:LISTEN_TOPICS;
+  const pool=all.filter(t=>!recent.has(t.id));
+  const src=pool.length?pool:all;
   return src[Math.floor(Math.random()*src.length)];
 }
+// ✨ Temas personalizados — generados por IA desde el perfil del usuario + agregados a mano
+function loadPersonalTopics(){try{return JSON.parse(localStorage.getItem("fluido-listen-personal")||"null")||{sig:null,topics:[]};}catch(e){return{sig:null,topics:[]};}}
+function savePersonalTopics(p){try{localStorage.setItem("fluido-listen-personal",JSON.stringify(p));}catch(e){}}
+function profileSig(state){try{return JSON.stringify(state.profile||{});}catch(e){return"";}}
 
 function listenLoad(){try{return JSON.parse(sessionStorage.getItem("fluido-listen")||"null");}catch(e){return null;}}
 function listenSave(d){try{sessionStorage.setItem("fluido-listen",JSON.stringify(d));}catch(e){}}
@@ -1644,6 +1649,40 @@ function Listen({state,save,registerActivity}){
   const [activeLine,setActiveLine]=useState(-1);
   const [shadow,setShadow]=useState(false);
   const [topicSugs]=useState(()=>[...LISTEN_TOPICS].sort(()=>Math.random()-0.5).slice(0,6));
+  const [personal,setPersonal]=useState(()=>loadPersonalTopics());
+  const [genLoading,setGenLoading]=useState(false);
+  const [addingTopic,setAddingTopic]=useState(false);
+  const [customText,setCustomText]=useState("");
+  const sig=profileSig(state);
+  const personalStale=personal.topics.length>0&&personal.sig!==sig;
+
+  const generatePersonalTopics=async()=>{
+    setGenLoading(true);setError(null);
+    try{
+      const r=await askAI_JSON(
+        `Perfil del estudiante de inglés: ${profileForPrompts(state,false)}\n\nGenera 8 situaciones/escenarios de listening directamente relevantes para los objetivos, trabajo e intereses de ESTE perfil (ej: si trabaja en tecnología → daily standup, entrevista técnica, reunión con cliente; si va a viajar → situaciones de ese viaje; si le gusta un hobby → escenas de ese hobby). Cada situación debe ser concreta y distinta. Devuelve SOLO JSON: {"topics":[{"es":"emoji + nombre corto en español (máx 4 palabras)","en":"specific description in English of the situation for a 4-6 line dialogue"}]}`,
+        'Eres un diseñador de contenido educativo. Devuelve JSON con "topics": array de exactamente 8 objetos {es,en}.');
+      const topics=(r.topics||[]).filter(t=>t.es&&t.en).slice(0,8).map((t,i)=>({id:"p"+Date.now()+"_"+i,es:t.es,en:t.en}));
+      if(!topics.length) throw Object.assign(new Error("empty"),{userMsg:"La IA no devolvió temas válidos. Intenta de nuevo."});
+      // Conserva los temas agregados a mano (id que empieza con "c")
+      const custom=personal.topics.filter(t=>t.id.startsWith("c"));
+      const next={sig,topics:[...topics,...custom]};
+      setPersonal(next);savePersonalTopics(next);
+    }catch(e){setError(e.userMsg||"Error generando tus temas.");}
+    setGenLoading(false);
+  };
+
+  const addCustomTopic=()=>{
+    const txt=customText.trim(); if(!txt) return;
+    const t={id:"c"+Date.now(),es:"⭐ "+txt.slice(0,40),en:txt};
+    const next={sig:personal.sig||sig,topics:[...personal.topics,t]};
+    setPersonal(next);savePersonalTopics(next);
+    setCustomText("");setAddingTopic(false);
+  };
+  const removePersonalTopic=(id)=>{
+    const next={...personal,topics:personal.topics.filter(t=>t.id!==id)};
+    setPersonal(next);savePersonalTopics(next);
+  };
   const {speak,stop,failed,supported}=useSpeech();
   useEffect(()=>()=>stop(),[stop]);
   useEffect(()=>{if(failed)setReadingMode(true);},[failed]);
@@ -1664,7 +1703,7 @@ function Listen({state,save,registerActivity}){
           setInfo("♻️ Audio del banco local — sin costo de IA.");setLoading(false);return;
         }
       }
-      const topic=topicOverride||pickListenTopic();
+      const topic=topicOverride||pickListenTopic(personal.topics);
       pushRecentTopic(topic.id);
       const a0L = state.level==="A0" ? ' NIVEL A0: el diálogo debe ser de solo 3-4 líneas MUY cortas y simples, y cada item de dialogue debe incluir además "line_es" con su traducción al español.' : "";
       const data=await askAI_JSON(
@@ -1700,6 +1739,47 @@ function Listen({state,save,registerActivity}){
         <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:20}}>
           <p style={{fontFamily:FEN,fontSize:18,marginBottom:14,textAlign:"center"}}>Train your ear.</p>
           <BigButton onClick={()=>newExercise()}>🎲 Nuevo audio (sorpresa)</BigButton>
+
+          <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"16px 0 8px"}}>✨ Tus temas</p>
+          {personal.topics.length===0?(
+            <div>
+              <p style={{fontSize:13,color:C.inkSoft,marginBottom:8}}>Fluido puede crear situaciones a tu medida según tus objetivos e intereses del perfil.</p>
+              <button onClick={generatePersonalTopics} disabled={genLoading}
+                style={{width:"100%",padding:12,borderRadius:12,border:`2px dashed ${C.green}`,background:"transparent",color:C.green,fontWeight:600,fontSize:14,opacity:genLoading?0.6:1}}>
+                {genLoading?"✨ Creando tus temas…":"✨ Generar temas según mi perfil"}
+              </button>
+            </div>
+          ):(
+            <div>
+              {personalStale&&(
+                <button onClick={generatePersonalTopics} disabled={genLoading}
+                  style={{width:"100%",marginBottom:8,padding:"9px 12px",borderRadius:12,border:`1.5px solid ${C.blue}`,background:C.blueSoft,color:C.blue,fontWeight:600,fontSize:13,opacity:genLoading?0.6:1}}>
+                  {genLoading?"✨ Actualizando…":"🔄 Tu perfil cambió — actualizar mis temas"}
+                </button>
+              )}
+              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                {personal.topics.map(t=>(
+                  <span key={t.id} style={{display:"inline-flex",alignItems:"center",borderRadius:999,border:`1.5px solid ${C.green}`,background:C.greenSoft,overflow:"hidden"}}>
+                    <button onClick={()=>newExercise(t)} style={{padding:"8px 4px 8px 12px",border:"none",background:"transparent",color:C.green,fontSize:13,fontWeight:600}}>{t.es}</button>
+                    <button onClick={()=>removePersonalTopic(t.id)} aria-label={`Eliminar tema ${t.es}`} style={{padding:"8px 10px 8px 4px",border:"none",background:"transparent",color:C.green,fontSize:12,opacity:0.6}}>✕</button>
+                  </span>
+                ))}
+                {!genLoading&&<button onClick={generatePersonalTopics} aria-label="Regenerar temas" style={{padding:"8px 12px",borderRadius:999,border:`1.5px dashed ${C.line}`,background:"transparent",color:C.inkSoft,fontSize:13}}>↻</button>}
+              </div>
+            </div>
+          )}
+          {!addingTopic?(
+            <button onClick={()=>setAddingTopic(true)} style={{marginTop:8,padding:"8px 12px",borderRadius:999,border:`1.5px dashed ${C.line}`,background:"transparent",color:C.inkSoft,fontSize:13,fontWeight:600}}>＋ Agregar tema propio</button>
+          ):(
+            <div className="fadein" style={{marginTop:8,display:"flex",gap:8}}>
+              <input value={customText} onChange={e=>setCustomText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addCustomTopic()} autoFocus
+                placeholder="Ej: daily standup de mi equipo, negociar con un proveedor…"
+                style={{flex:1,padding:"10px 12px",borderRadius:12,border:`1.5px solid ${C.line}`,background:C.paper,color:C.ink,fontSize:14}}/>
+              <button onClick={addCustomTopic} disabled={!customText.trim()}
+                style={{padding:"10px 14px",borderRadius:12,border:"none",background:C.green,color:"#fff",fontWeight:700,fontSize:14,opacity:customText.trim()?1:0.5}}>OK</button>
+            </div>
+          )}
+
           <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"16px 0 8px"}}>O elige una situación</p>
           <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
             {topicSugs.map(t=>(
