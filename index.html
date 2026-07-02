@@ -1251,6 +1251,48 @@ function GradeBtn({color,bg,onClick,label,sub}){return(<button onClick={onClick}
 // ============================================================
 const SPEEDS=[{v:0.5,l:"0.5×"},{v:0.8,l:"0.8×"},{v:1.0,l:"Normal"},{v:1.5,l:"1.5×"},{v:2.0,l:"2×"}];
 
+// 🎲 Temas rotativos para Escuchar — evita que todos los diálogos giren en torno al perfil
+const LISTEN_TOPICS=[
+  {id:"restaurant", es:"🍽️ En un restaurante",        en:"ordering food at a restaurant, asking about the menu or complaining about a dish"},
+  {id:"airport",    es:"✈️ En el aeropuerto",          en:"at the airport: check-in, a delayed flight, lost luggage or boarding"},
+  {id:"smalltalk",  es:"☕ Small talk",                 en:"casual small talk between acquaintances about the weekend, weather or plans"},
+  {id:"meeting",    es:"💼 Reunión de trabajo",         en:"a work meeting: status updates, a blocker, or scheduling a follow-up"},
+  {id:"interview",  es:"🤝 Entrevista laboral",         en:"a job interview: experience, strengths, salary expectations"},
+  {id:"doctor",     es:"🏥 En el médico",               en:"a doctor's appointment: describing symptoms and receiving advice"},
+  {id:"shopping",   es:"🛍️ De compras",                en:"shopping: sizes, prices, returns or asking for help in a store"},
+  {id:"hotel",      es:"🏨 En un hotel",                en:"at a hotel: checking in, a problem with the room, asking for recommendations"},
+  {id:"taxi",       es:"🚕 Taxi / transporte",          en:"taking a taxi or rideshare, or asking for directions on public transport"},
+  {id:"phone",      es:"📞 Llamada de soporte",         en:"a customer support phone call about a bill, an order or a technical issue"},
+  {id:"neighbors",  es:"🏠 Entre vecinos",              en:"neighbors chatting: noise, a package, borrowing something, a building issue"},
+  {id:"gym",        es:"💪 En el gimnasio",             en:"at the gym: routines, classes, memberships or asking how a machine works"},
+  {id:"bank",       es:"🏦 En el banco",                en:"at the bank: opening an account, a card problem, or a suspicious charge"},
+  {id:"friends",    es:"🎉 Planes con amigos",          en:"friends making weekend plans: a movie, a trip, a birthday party"},
+  {id:"cooking",    es:"👩‍🍳 Cocinando",               en:"two people cooking together, discussing a recipe or missing ingredients"},
+  {id:"movies",     es:"🎬 Cine y series",              en:"discussing a movie or TV series one of them just watched"},
+  {id:"sports",     es:"⚽ Deportes",                   en:"talking about a recent match, a favorite team or starting a new sport"},
+  {id:"travelplan", es:"🗺️ Planeando un viaje",        en:"planning a trip: destinations, budget, dates and what to pack"},
+  {id:"apartment",  es:"🔑 Arriendo de depto",          en:"renting an apartment: viewing, rent, conditions and utilities"},
+  {id:"pets",       es:"🐱 Mascotas",                   en:"talking about pets: adopting one, a vet visit or a funny pet story"},
+  {id:"weather",    es:"🌦️ Clima extremo",             en:"reacting to unusual weather and how it affects their plans"},
+  {id:"tech",       es:"📱 Tecnología",                 en:"helping someone with a phone or app problem, or discussing a new gadget"},
+  {id:"coffee",     es:"☕ Pedir un café",              en:"ordering coffee: customizations, a wrong order or chatting with the barista"},
+  {id:"lost",       es:"🧭 Perdido en la ciudad",       en:"a lost tourist asking a local for directions and recommendations"},
+  {id:"party",      es:"🥳 En una fiesta",              en:"meeting someone new at a party: introductions and finding common interests"},
+  {id:"school",     es:"🎓 Estudios",                   en:"two students discussing a course, an exam or a group project"},
+  {id:"health",     es:"🥗 Vida saludable",             en:"discussing habits: sleep, diet, stress or a new year resolution"},
+  {id:"news",       es:"📰 Una noticia",                en:"reacting to a (fictional, light) piece of local news"},
+  {id:"repair",     es:"🔧 Algo se rompió",             en:"something broke at home: calling or talking to a repair person"},
+  {id:"farewell",   es:"👋 Despedida",                  en:"saying goodbye to a coworker or friend who is moving away"},
+];
+function recentTopics(){try{return JSON.parse(localStorage.getItem("fluido-listen-topics")||"[]");}catch(e){return[];}}
+function pushRecentTopic(id){try{const r=[...recentTopics(),id].slice(-10);localStorage.setItem("fluido-listen-topics",JSON.stringify(r));}catch(e){}}
+function pickListenTopic(){
+  const recent=new Set(recentTopics());
+  const pool=LISTEN_TOPICS.filter(t=>!recent.has(t.id));
+  const src=pool.length?pool:LISTEN_TOPICS;
+  return src[Math.floor(Math.random()*src.length)];
+}
+
 function listenLoad(){try{return JSON.parse(sessionStorage.getItem("fluido-listen")||"null");}catch(e){return null;}}
 function listenSave(d){try{sessionStorage.setItem("fluido-listen",JSON.stringify(d));}catch(e){}}
 // ============================================================
@@ -1601,30 +1643,37 @@ function Listen({state,save,registerActivity}){
   const [playing,setPlaying]=useState(false);
   const [activeLine,setActiveLine]=useState(-1);
   const [shadow,setShadow]=useState(false);
+  const [topicSugs]=useState(()=>[...LISTEN_TOPICS].sort(()=>Math.random()-0.5).slice(0,6));
   const {speak,stop,failed,supported}=useSpeech();
   useEffect(()=>()=>stop(),[stop]);
   useEffect(()=>{if(failed)setReadingMode(true);},[failed]);
   useEffect(()=>{ if(exercise) listenSave({exercise,picked,revealed}); },[exercise,picked,revealed]);
 
-  const newExercise=async()=>{
-    setLoading(true);setError(null);setInfo(null);setExercise(null);setPicked(null);setRevealed(false);stop();setPlaying(false);setActiveLine(-1);
+  const newExercise=async(topicOverride)=>{
+    setLoading(true);setError(null);setInfo(null);setExercise(null);setPicked(null);setRevealed(false);stop();setPlaying(false);setActiveLine(-1);setShadow(false);
     try{sessionStorage.removeItem("fluido-listen");}catch(e){}
     try{
-      const bank=loadBank();
-      const used=new Set(state.usedListening||[]);
-      const cands=bank.listening.filter(e=>e.id&&!used.has(e.id)&&e.level===state.level);
-      if(cands.length>0){
-        const pick=cands[Math.floor(Math.random()*cands.length)];
-        setExercise(pick);save({...state,usedListening:[...(state.usedListening||[]),pick.id].slice(-300)});
-        setInfo("♻️ Audio del banco local — sin costo de IA.");setLoading(false);return;
+      // Si el usuario eligió un tema explícito, generamos fresco con IA (no reutilizamos banco)
+      if(!topicOverride){
+        const bank=loadBank();
+        const used=new Set(state.usedListening||[]);
+        const cands=bank.listening.filter(e=>e.id&&e.topic_es&&!used.has(e.id)&&e.level===state.level);
+        if(cands.length>0){
+          const pick=cands[Math.floor(Math.random()*cands.length)];
+          setExercise(pick);save({...state,usedListening:[...(state.usedListening||[]),pick.id].slice(-300)});
+          setInfo("♻️ Audio del banco local — sin costo de IA.");setLoading(false);return;
+        }
       }
+      const topic=topicOverride||pickListenTopic();
+      pushRecentTopic(topic.id);
       const a0L = state.level==="A0" ? ' NIVEL A0: el diálogo debe ser de solo 3-4 líneas MUY cortas y simples, y cada item de dialogue debe incluir además "line_es" con su traducción al español.' : "";
       const data=await askAI_JSON(
-        `Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera un ejercicio de listening en inglés para este perfil: una CONVERSACIÓN REAL (4-6 líneas) entre dos personas sobre sus objetivos o intereses. Es crítico que sea una conversación auténtica, no dos monólogos paralelos sobre el mismo tema: cada línea debe reaccionar, responder o hacer una pregunta sobre lo que dijo la línea anterior (ej. preguntar algo, mostrar acuerdo/sorpresa, pedir más detalles, dar seguimiento a algo mencionado). Evita que cada persona simplemente anuncie su propio objetivo sin conectar con lo que dijo la otra. El inglés del diálogo DEBE ajustarse EXACTAMENTE a la complejidad del nivel indicado en el perfil. Varía el tema (semilla: ${Math.random().toString(36).slice(2)}).${a0L}\n\nDevuelve JSON: {"title_es":"título","dialogue":[{"speaker":"nombre","line":"inglés"}],"question_es":"pregunta de comprensión","options_es":["A","B","C"],"correct_index":0,"key_phrase_en":"expresión útil","key_phrase_es":"traducción"}`,
-        "Eres un profesor de inglés que crea diálogos realistas donde las personas genuinamente se escuchan y responden entre sí, no monólogos alternados.");
-      data.id="L"+Date.now()+Math.random().toString(36).slice(2,6);data.level=state.level;
+        `Nivel de inglés del estudiante: ${state.level}.\n\nGenera un ejercicio de listening en inglés: una CONVERSACIÓN REAL (4-6 líneas) entre dos personas. SITUACIÓN OBLIGATORIA del diálogo: ${topic.en}. El diálogo debe ocurrir dentro de esa situación concreta — NO lo conviertas en una charla sobre objetivos personales, aprendizaje de idiomas ni intereses genéricos. Usa nombres de personas variados y poco comunes (evita Sarah, Tom, John, Emma). Es crítico que sea una conversación auténtica, no dos monólogos paralelos: cada línea debe reaccionar, responder o hacer una pregunta sobre lo que dijo la línea anterior (mostrar sorpresa, pedir detalles, discrepar suavemente, hacer seguimiento). El inglés DEBE ajustarse EXACTAMENTE a la complejidad del nivel ${state.level}. Dale un giro específico e inesperado a la situación (semilla: ${Math.random().toString(36).slice(2)}).${a0L}\n\nDevuelve JSON: {"title_es":"título","dialogue":[{"speaker":"nombre","line":"inglés"}],"question_es":"pregunta de comprensión","options_es":["A","B","C"],"correct_index":0,"key_phrase_en":"expresión útil","key_phrase_es":"traducción"}`,
+        "Eres un profesor de inglés que crea diálogos realistas y variados donde las personas genuinamente se escuchan y responden entre sí, no monólogos alternados. Cada diálogo debe sentirse como una escena distinta de la vida real.");
+      data.id="L"+Date.now()+Math.random().toString(36).slice(2,6);data.level=state.level;data.topic_es=topic.es;
       setExercise(data);const bank2=loadBank();bank2.listening=[...bank2.listening,data];saveBank(bank2);
       save({...state,usedListening:[...(state.usedListening||[]),data.id].slice(-300)});
+      setInfo(`🎲 Tema: ${topic.es}`);
     }catch(e){setError(e.userMsg||"Error al obtener el ejercicio.");}
     setLoading(false);
   };
@@ -1647,14 +1696,31 @@ function Listen({state,save,registerActivity}){
     <div className="fadein">
       <h2 style={{fontSize:24,fontWeight:700,marginBottom:4}}>Escuchar</h2>
       <p style={{marginBottom:14,fontSize:14,color:C.inkSoft}}>Escucha primero <span className="hl">sin leer</span>. La transcripción se revela al final.</p>
-      {!exercise&&!loading&&<div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:20,textAlign:"center"}}><p style={{fontFamily:FEN,fontSize:18,marginBottom:14}}>Train your ear.</p><BigButton onClick={newExercise}>Nuevo audio</BigButton></div>}
+      {!exercise&&!loading&&(
+        <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:20}}>
+          <p style={{fontFamily:FEN,fontSize:18,marginBottom:14,textAlign:"center"}}>Train your ear.</p>
+          <BigButton onClick={()=>newExercise()}>🎲 Nuevo audio (sorpresa)</BigButton>
+          <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"16px 0 8px"}}>O elige una situación</p>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+            {topicSugs.map(t=>(
+              <button key={t.id} onClick={()=>newExercise(t)}
+                style={{padding:"8px 12px",borderRadius:999,border:`1.5px solid ${C.line}`,background:C.paper,color:C.ink,fontSize:13,fontWeight:600}}>
+                {t.es}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {loading&&<p style={{color:C.inkSoft}}>Preparando ejercicio…</p>}
       {error&&<p style={{color:C.coral}}>{error}</p>}
       {info&&<p style={{color:C.green,fontSize:13}}>{info}</p>}
       {exercise&&(
         <div>
           <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18}}>
-            <strong>{exercise.title_es}</strong>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+              <strong>{exercise.title_es}</strong>
+              {exercise.topic_es&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:999,background:C.paper,border:`1px solid ${C.line}`,color:C.inkSoft,flexShrink:0}}>{exercise.topic_es}</span>}
+            </div>
             {!readingMode?(
               <React.Fragment>
                 <div style={{display:"flex",alignItems:"center",gap:10,marginTop:12}}>
@@ -1741,7 +1807,11 @@ function Listen({state,save,registerActivity}){
                   </div>
                 </div>
               )}
-              <button onClick={newExercise} style={{width:"100%",marginTop:10,padding:14,borderRadius:14,border:`2px dashed ${C.blue}`,background:"transparent",color:C.blue,fontWeight:600,fontSize:15}}>Otro audio</button>
+              <div style={{display:"flex",gap:8,marginTop:10}}>
+                <button onClick={()=>newExercise()} style={{flex:1,padding:14,borderRadius:14,border:`2px dashed ${C.blue}`,background:"transparent",color:C.blue,fontWeight:600,fontSize:15}}>🎲 Otro audio</button>
+                <button onClick={()=>{setExercise(null);setPicked(null);setRevealed(false);setInfo(null);try{sessionStorage.removeItem("fluido-listen");}catch(e){}}}
+                  style={{flex:1,padding:14,borderRadius:14,border:`2px dashed ${C.green}`,background:"transparent",color:C.green,fontWeight:600,fontSize:15}}>🎯 Elegir tema</button>
+              </div>
             </div>
           )}
         </div>
