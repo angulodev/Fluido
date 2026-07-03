@@ -1662,6 +1662,7 @@ function Listen({state,save,registerActivity}){
   const [playing,setPlaying]=useState(false);
   const [activeLine,setActiveLine]=useState(-1);
   const [shadow,setShadow]=useState(false);
+  const [showEs,setShowEs]=useState({});
   const [topicSugs]=useState(()=>[...LISTEN_TOPICS].sort(()=>Math.random()-0.5).slice(0,10));
   const [manageTopics,setManageTopics]=useState(false);
   const [personal,setPersonal]=useState(()=>loadPersonalTopics());
@@ -1704,7 +1705,7 @@ function Listen({state,save,registerActivity}){
   useEffect(()=>{ if(exercise) listenSave({exercise,picked,revealed}); },[exercise,picked,revealed]);
 
   const newExercise=async(topicOverride)=>{
-    setLoading(true);setError(null);setInfo(null);setExercise(null);setPicked(null);setRevealed(false);stop();setPlaying(false);setActiveLine(-1);setShadow(false);
+    setLoading(true);setError(null);setInfo(null);setExercise(null);setPicked(null);setRevealed(false);stop();setPlaying(false);setActiveLine(-1);setShadow(false);setShowEs({});
     try{sessionStorage.removeItem("fluido-listen");}catch(e){}
     try{
       // Si el usuario eligió un tema explícito, generamos fresco con IA (no reutilizamos banco)
@@ -1916,7 +1917,9 @@ function Listen({state,save,registerActivity}){
                         <strong style={{fontSize:13,color:sc[d.speaker]}}>{d.speaker}:</strong>{" "}
                         <span style={{fontFamily:FEN,fontSize:16}}>{d.line}</span>{" "}
                         <button onClick={()=>speak(d.line,{rate})} aria-label="Escuchar esta línea" style={{border:"none",background:"transparent",fontSize:16,padding:0}}>🔊</button>
-                        {d.line_es&&<span style={{display:"block",fontSize:12,color:C.inkSoft,fontStyle:"italic"}}>🇪🇸 {d.line_es}</span>}
+                        {d.line_es&&(showEs[i]
+                          ?<span onClick={()=>setShowEs(s=>({...s,[i]:false}))} style={{display:"block",fontSize:12,color:C.inkSoft,fontStyle:"italic",cursor:"pointer"}}>🇪🇸 {d.line_es}</span>
+                          :<button onClick={()=>setShowEs(s=>({...s,[i]:true}))} style={{display:"block",marginTop:2,padding:0,border:"none",background:"transparent",fontSize:11,color:C.inkSoft,textDecoration:"underline dotted",opacity:0.75}}>🇪🇸 traducción</button>)}
                       </p>
                       {shadow&&<PronounceCheck target={d.line}/>}
                     </div>);})}
@@ -1940,13 +1943,16 @@ function Listen({state,save,registerActivity}){
 }
 function ReadOnce({dialogue}){
   const [visible,setVisible]=useState(true);
+  const [showEs,setShowEs]=useState({});
   if(!visible) return<p style={{fontSize:13,color:C.inkSoft,fontStyle:"italic"}}>Diálogo oculto. Responde la pregunta de memoria 👇</p>;
   const speakers=[...new Set(dialogue.map(d=>d.speaker))];
   const sc={}; speakers.forEach((s,i)=>{sc[s]=[C.blue,C.green,C.coral][i%3];});
   return(
     <div>
       <div style={{background:C.paper,borderRadius:12,padding:12}}>
-        {dialogue.map((d,i)=><p key={i} style={{marginBottom:6,lineHeight:1.5}}><strong style={{fontSize:12,color:sc[d.speaker]}}>{d.speaker}:</strong>{" "}<span style={{fontFamily:FEN,fontSize:15}}>{d.line}</span>{d.line_es&&<span style={{display:"block",fontSize:11,color:C.inkSoft,fontStyle:"italic"}}>🇪🇸 {d.line_es}</span>}</p>)}
+        {dialogue.map((d,i)=><p key={i} style={{marginBottom:6,lineHeight:1.5}}><strong style={{fontSize:12,color:sc[d.speaker]}}>{d.speaker}:</strong>{" "}<span style={{fontFamily:FEN,fontSize:15}}>{d.line}</span>{d.line_es&&(showEs[i]
+          ?<span onClick={()=>setShowEs(s=>({...s,[i]:false}))} style={{display:"block",fontSize:11,color:C.inkSoft,fontStyle:"italic",cursor:"pointer"}}>🇪🇸 {d.line_es}</span>
+          :<button onClick={()=>setShowEs(s=>({...s,[i]:true}))} style={{display:"block",marginTop:2,padding:0,border:"none",background:"transparent",fontSize:10,color:C.inkSoft,textDecoration:"underline dotted",opacity:0.75}}>🇪🇸 traducción</button>)}</p>)}
       </div>
       <button onClick={()=>setVisible(false)} style={{width:"100%",marginTop:8,padding:10,borderRadius:10,border:`1.5px solid ${C.blue}`,background:C.blueSoft,color:C.blue,fontWeight:600,fontSize:14}}>Listo, ocultar diálogo</button>
     </div>
