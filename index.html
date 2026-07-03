@@ -785,6 +785,7 @@ function TabBar({tab,setTab,level}){
 // INICIO
 // ============================================================
 function Home({state,save,go}){
+  const [mixOpen,setMixOpen]=useState(false);
   const desktop=useIsDesktop();
   const d=state.daily;
   const cfg=getAIConfig()||{};
@@ -814,7 +815,8 @@ function Home({state,save,go}){
           🧊 <strong>Protector de racha usado:</strong> ayer no practicaste, pero tu racha sigue viva. (Máximo 1 por semana.)
         </div>
       )}
-      <DailyReview state={state} go={go}/>
+      <DailyReview state={state} onStart={()=>setMixOpen(true)}/>
+      {mixOpen&&<MixedReview state={state} save={save} onClose={()=>setMixOpen(false)}/>}
       <div style={{marginTop:20}}>
         <p style={{fontSize:13,color:C.inkSoft,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Misiones de hoy</p>
         <div style={{display:"grid",gridTemplateColumns:desktop?"1fr 1fr":"1fr",gap:desktop?10:0}}>
@@ -864,8 +866,93 @@ function Home({state,save,go}){
 }
 function StatCard({big,label,accent}){return(<div style={{flex:1,background:C.card,border:`1px solid ${C.line}`,borderRadius:14,padding:"14px 16px"}}><div style={{fontSize:30,fontWeight:700,color:accent,lineHeight:1}}>{big}</div><div style={{fontSize:13,color:C.inkSoft,marginTop:4}}>{label}</div></div>);}
 
+// ⚡ Sesión de repaso mixta: frases + verbos + vocab vencidos en un solo flujo
+function MixedReview({state,save,onClose}){
+  const [queue]=useState(()=>{
+    const now=Date.now();const items=[];
+    state.deck.filter(c=>c.due<=now).sort(()=>Math.random()-0.5).slice(0,10)
+      .forEach(c=>items.push({type:"phrase",icon:"📚",front:c.es,back:c.en,note:c.note,id:c.id}));
+    try{
+      const vs=getVerbSRS();const bank=loadBank();
+      (bank.verbs||[]).filter(v=>{const d=vs[verbKey(v)];return d&&d.due<=now;}).sort(()=>Math.random()-0.5).slice(0,5)
+        .forEach(v=>items.push({type:"verb",icon:"🔤",front:v.es,back:v.en,id:verbKey(v)}));
+    }catch(e){}
+    try{
+      const ws=vocabLoadSrs();const due=[];
+      BANK_WORDS.forEach(b=>b.words.forEach(w=>{const d=ws[w.en.toLowerCase()];if(d&&d.due<=now)due.push(w);}));
+      due.sort(()=>Math.random()-0.5).slice(0,10)
+        .forEach(w=>items.push({type:"vocab",icon:"🔠",front:w.es,back:w.en,id:w.en.toLowerCase()}));
+    }catch(e){}
+    return items.sort(()=>Math.random()-0.5).slice(0,20);
+  });
+  const [idx,setIdx]=useState(0);
+  const [flipped,setFlipped]=useState(false);
+  const [counts,setCounts]=useState({good:0,again:0});
+  const {speak}=useSpeech();
+  const card=queue[idx];
+  const grade=(g)=>{
+    if(!card)return;
+    if(card.type==="phrase"){
+      const deck=state.deck.map(c=>c.id===card.id?{...c,...srsNext(c,g),seen:(c.seen||0)+1}:c);
+      save({...state,deck});
+    }else if(card.type==="verb"){
+      const s=getVerbSRS();const prev=s[card.id]||{interval:0,seen:0};
+      s[card.id]={...srsNext(prev,g),seen:(prev.seen||0)+1};setVerbSRS(s);
+    }else{
+      const s=vocabLoadSrs();const prev=s[card.id]||{interval:0,seen:0};
+      s[card.id]={...srsNext(prev,g),seen:(prev.seen||0)+1};vocabSaveSrs(s);
+    }
+    setCounts(c=>({...c,[g==="again"?"again":"good"]:c[g==="again"?"again":"good"]+1}));
+    setFlipped(false);setIdx(i=>i+1);
+  };
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:200,background:C.bg,padding:"18px 16px",overflowY:"auto"}}>
+      <div style={{maxWidth:560,margin:"0 auto"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <span style={{fontWeight:800,fontSize:18}}>⚡ Repaso del día</span>
+          <button onClick={onClose} style={{border:"none",background:"transparent",color:C.inkSoft,fontSize:22,padding:4}} aria-label="Cerrar">✕</button>
+        </div>
+        <div style={{height:6,background:C.card,borderRadius:999,marginBottom:16,overflow:"hidden"}}>
+          <div style={{height:"100%",width:`${queue.length?Math.round(idx/queue.length*100):100}%`,background:C.green,borderRadius:999,transition:"width .3s"}}/>
+        </div>
+        {card?(
+          <div className="fadein" style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:18,padding:24,minHeight:220,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
+            <div style={{textAlign:"center"}}>
+              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5}}>{card.icon} {card.type==="phrase"?"Frase":card.type==="verb"?"Verbo":"Palabra"} · {idx+1}/{queue.length}</p>
+              <p style={{fontSize:24,fontWeight:700,margin:"16px 0 6px",color:C.ink}}>{card.front}</p>
+              {flipped&&(
+                <p className="fadein" style={{fontSize:26,fontFamily:"'Newsreader',Georgia,serif",margin:"6px 0"}}>
+                  <span className="hl">{card.back}</span>
+                  <button onClick={()=>speak(card.back)} aria-label="Escuchar" style={{border:"none",background:"transparent",fontSize:20,marginLeft:8}}>🔊</button>
+                </p>
+              )}
+              {flipped&&card.note&&<p style={{fontSize:13,color:C.inkSoft,margin:"6px 0 0"}}>{card.note}</p>}
+            </div>
+            {!flipped?(
+              <BigButton onClick={()=>{setFlipped(true);speak(card.back);}}>Mostrar en inglés</BigButton>
+            ):(
+              <div style={{display:"flex",gap:8,marginTop:16}}>
+                <GradeBtn color={C.coral} bg={C.coralSoft} onClick={()=>grade("again")} label="Otra vez" sub="en 10 min"/>
+                <GradeBtn color={C.blue} bg={C.blueSoft} onClick={()=>grade("good")} label="Bien" sub="días"/>
+                <GradeBtn color={C.green} bg={C.greenSoft} onClick={()=>grade("easy")} label="Fácil" sub="más días"/>
+              </div>
+            )}
+          </div>
+        ):(
+          <div className="fadein" style={{background:C.greenSoft,border:`1px solid ${C.green}`,borderRadius:18,padding:28,textAlign:"center"}}>
+            <p style={{fontSize:40,margin:"0 0 8px"}}>🎉</p>
+            <p style={{fontWeight:700,fontSize:18,color:C.green,marginBottom:6}}>¡Repaso completado!</p>
+            <p style={{fontSize:14,color:C.inkSoft,marginBottom:16}}>{counts.good} bien · {counts.again} para reintentar. Tu memoria de largo plazo te lo agradece.</p>
+            <BigButton onClick={onClose}>Volver al inicio</BigButton>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ⚡ Repaso del día — resume todo lo vencido en los tres sistemas SRS
-function DailyReview({state,go}){
+function DailyReview({state,onStart}){
   const now=Date.now();
   const phrasesDue=state.deck.filter(c=>c.due<=now).length;
   let verbsDue=0,vocabDue=0;
@@ -880,7 +967,7 @@ function DailyReview({state,go}){
   const total=phrasesDue+verbsDue+vocabDue;
   if(!total) return null;
   return(
-    <button onClick={()=>go("phrases")} className="fadein"
+    <button onClick={onStart} className="fadein"
       style={{width:"100%",marginTop:12,textAlign:"left",background:C.card,border:`1.5px solid ${C.blue}`,borderRadius:14,padding:"13px 16px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <span style={{fontWeight:700,fontSize:15}}>⚡ Repaso del día</span>
@@ -1043,6 +1130,21 @@ function Talk({state,registerActivity}){
                 style={{width:"100%",marginTop:10,padding:"13px 18px",borderRadius:14,border:`1.5px solid ${C.blue}`,background:"transparent",color:C.blue,fontWeight:600,fontSize:15}}>
                 ✏️ Proponer mi propio escenario
               </button>
+              {(()=>{const pt=loadPersonalTopics().topics;if(!pt.length)return null;return(
+                <div style={{marginTop:14}}>
+                  <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"0 0 8px"}}>✨ O conversa sobre tus temas</p>
+                  <div style={{position:"relative"}}>
+                    <div style={{display:"grid",gridAutoFlow:"column",gridTemplateRows:pt.length>2?"auto auto":"auto",gap:8,overflowX:"auto",paddingBottom:6,paddingRight:24,WebkitOverflowScrolling:"touch",justifyContent:"start"}}>
+                      {pt.map(t=>(
+                        <button key={t.id} onClick={()=>newScenario(t.en)}
+                          style={{padding:"9px 14px",borderRadius:999,border:`1.5px solid ${C.line}`,background:C.paper,color:C.ink,fontSize:13,fontWeight:600,whiteSpace:"nowrap",justifySelf:"start"}}>
+                          {t.es}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{position:"absolute",top:0,right:0,bottom:6,width:26,background:`linear-gradient(90deg, transparent, ${C.card})`,pointerEvents:"none"}}/>
+                  </div>
+                </div>);})()}
             </div>
           ):(
             <div className="fadein" style={{background:C.card,border:`1.5px solid ${C.blue}`,borderRadius:16,padding:18}}>
@@ -1334,11 +1436,12 @@ function Write({state,registerActivity}){
 
   useEffect(()=>{ writeSave({prompt,text,feedback,thread}); },[prompt,text,feedback,thread]);
 
-  const newPrompt=async()=>{
+  const newPrompt=async(topic)=>{
     setLoadingPrompt(true);setError(null);setFeedback(null);setText("");setThread([]);
     try{
+      const topicLine=topic?`TEMA OBLIGATORIO de la consigna: ${topic}. `:"Debe pedir escribir sobre un tema cotidiano relacionado a sus intereses u objetivos. ";
       const data=await askAI_JSON(
-        `Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera UNA consigna breve de escritura en inglés para este perfil, ajustada EXACTAMENTE a la complejidad del nivel indicado. Debe pedir escribir 1-3 frases sobre un tema cotidiano relacionado a sus intereses u objetivos. Varía el tema (semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve SOLO JSON: {"prompt_es":"consigna en español, breve y clara","example_hint_es":"pista corta opcional de qué incluir"}`,
+        `Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera UNA consigna breve de escritura en inglés para este perfil, ajustada EXACTAMENTE a la complejidad del nivel indicado. ${topicLine}Debe pedir escribir 1-3 frases. Varía el enfoque (semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve SOLO JSON: {"prompt_es":"consigna en español, breve y clara","example_hint_es":"pista corta opcional de qué incluir"}`,
         "Eres un profesor de inglés que diseña consignas de escritura cortas y motivadoras."
       );
       setPrompt(data);
@@ -1408,7 +1511,24 @@ function Write({state,registerActivity}){
       <p style={{fontSize:14,color:C.inkSoft,marginBottom:16}}>Escribe tú en inglés y recibe corrección al instante.</p>
 
       {!prompt&&!loadingPrompt&&(
-        <BigButton onClick={newPrompt}>✨ Pedir una consigna</BigButton>
+        <div>
+          <BigButton onClick={()=>newPrompt()}>✨ Pedir una consigna</BigButton>
+          {(()=>{const pt=loadPersonalTopics().topics;if(!pt.length)return null;return(
+            <div style={{marginTop:14}}>
+              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"0 0 8px"}}>✨ O escribe sobre tus temas</p>
+              <div style={{position:"relative"}}>
+                <div style={{display:"grid",gridAutoFlow:"column",gridTemplateRows:pt.length>2?"auto auto":"auto",gap:8,overflowX:"auto",paddingBottom:6,paddingRight:24,WebkitOverflowScrolling:"touch",justifyContent:"start"}}>
+                  {pt.map(t=>(
+                    <button key={t.id} onClick={()=>newPrompt(t.en)}
+                      style={{padding:"9px 14px",borderRadius:999,border:`1.5px solid ${C.line}`,background:C.card,color:C.ink,fontSize:13,fontWeight:600,whiteSpace:"nowrap",justifySelf:"start"}}>
+                      {t.es}
+                    </button>
+                  ))}
+                </div>
+                <div style={{position:"absolute",top:0,right:0,bottom:6,width:26,background:`linear-gradient(90deg, transparent, ${C.bg})`,pointerEvents:"none"}}/>
+              </div>
+            </div>);})()}
+        </div>
       )}
       {loadingPrompt&&<p style={{fontSize:14,color:C.inkSoft}}>Pensando una consigna…</p>}
       {error&&<p style={{fontSize:14,color:C.coral,marginTop:8}}>{error}</p>}
@@ -1426,7 +1546,7 @@ function Write({state,registerActivity}){
                 disabled={loadingReview}
                 style={{width:"100%",minHeight:100,padding:"12px 14px",borderRadius:12,border:`1.5px solid ${C.line}`,background:C.bg,color:C.ink,fontFamily:"Newsreader,Georgia,serif",fontSize:16,lineHeight:1.5,resize:"vertical"}}/>
               <div style={{display:"flex",gap:8,marginTop:10}}>
-                <button onClick={newPrompt} disabled={loadingReview}
+                <button onClick={()=>newPrompt()} disabled={loadingReview}
                   style={{padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:600,fontSize:13}}>
                   Cambiar consigna
                 </button>
@@ -1524,7 +1644,7 @@ function Write({state,registerActivity}){
                 <button onClick={tryAgain} style={{flex:1,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.line}`,background:"transparent",color:C.ink,fontWeight:600,fontSize:13}}>
                   Escribir otra vez
                 </button>
-                <button onClick={newPrompt} style={{flex:1,padding:"10px 14px",borderRadius:10,border:"none",background:C.blue,color:"#fff",fontWeight:700,fontSize:13}}>
+                <button onClick={()=>newPrompt()} style={{flex:1,padding:"10px 14px",borderRadius:10,border:"none",background:C.blue,color:"#fff",fontWeight:700,fontSize:13}}>
                   Nueva consigna
                 </button>
               </div>
@@ -2658,6 +2778,10 @@ function Verbs({registerActivity,state}){
 // ============================================================
 function vocabLoadSrs(){try{return JSON.parse(localStorage.getItem("fluido-vocab-srs")||"{}");}catch(e){return{};}}
 function vocabSaveSrs(m){try{localStorage.setItem("fluido-vocab-srs",JSON.stringify(m));}catch(e){}}
+// Cupo de palabras NUEVAS por día — evita que "2.900 pendientes" desmotive
+const VOCAB_NEW_PER_DAY=10;
+function vocabNewToday(){try{const r=JSON.parse(localStorage.getItem("fluido-vocab-new")||"null");return r&&r.date===todayStr()?r.count:0;}catch(e){return 0;}}
+function vocabBumpNew(){try{localStorage.setItem("fluido-vocab-new",JSON.stringify({date:todayStr(),count:vocabNewToday()+1}));}catch(e){}}
 
 function Vocabulary({registerActivity,state}){
   const [block,setBlock]=useState(null);
@@ -2687,11 +2811,18 @@ function Vocabulary({registerActivity,state}){
 
   const srsNow=vocabLoadSrs();
   const now=Date.now();
-  const dueOf=(b)=>b.words.filter(w=>{const d=srsNow[w.en.toLowerCase()];return !d||d.due<=now;}).length;
+  const statsOf=(b)=>{let due=0,fresh=0;b.words.forEach(w=>{const d=srsNow[w.en.toLowerCase()];if(!d)fresh++;else if(d.due<=now)due++;});return{due,fresh};};
 
   const pick=(b,force)=>{
     const s=vocabLoadSrs();const n=Date.now();
-    const pool=force?b.words:b.words.filter(w=>{const d=s[w.en.toLowerCase()];return !d||d.due<=n;});
+    let pool;
+    if(force){ pool=b.words; }
+    else{
+      pool=b.words.filter(w=>{const d=s[w.en.toLowerCase()];return d&&d.due<=n;});
+      if(!pool.length&&vocabNewToday()<VOCAB_NEW_PER_DAY){
+        pool=b.words.filter(w=>!s[w.en.toLowerCase()]);
+      }
+    }
     if(!pool.length){setCurrent(null);setFlipped(false);return;}
     setCurrent(pool[Math.floor(Math.random()*pool.length)]);setFlipped(false);
   };
@@ -2700,6 +2831,7 @@ function Vocabulary({registerActivity,state}){
     if(!current||!block) return;
     const s=vocabLoadSrs();
     const k=current.en.toLowerCase();
+    if(!s[k]) vocabBumpNew(); // palabra nueva: consume cupo diario
     const prev=s[k]||{interval:0,seen:0};
     const nx=srsNext(prev,g);
     s[k]={...nx,seen:(prev.seen||0)+1};
@@ -2714,15 +2846,15 @@ function Vocabulary({registerActivity,state}){
       <p style={{fontSize:14,color:C.inkSoft,marginBottom:12}}>2.921 palabras esenciales en 28 bloques. <span className="hl">Elige un tema</span> — las que marques como fáciles dejan de aparecer hasta que toque repasarlas.</p>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(165px,1fr))",gap:8}}>
         {BANK_WORDS.map(b=>{
-          const due=dueOf(b);
-          const done=due===0;
+          const st=statsOf(b);
+          const done=st.due===0;
           return(
             <button key={b.n} onClick={()=>{setBlock(b);setShowList(false);pick(b,false);}}
               style={{padding:"12px 10px",borderRadius:12,border:`1.5px solid ${done?C.green:C.line}`,background:C.card,textAlign:"left"}}>
               <div style={{fontSize:22}}>{b.icon}</div>
               <div style={{fontWeight:600,fontSize:13,marginTop:4,color:C.ink}}>{b.name}</div>
               <div style={{fontSize:11,color:done?C.green:C.inkSoft,fontWeight:done?700:400}}>
-                {done?"✓ Al día":`⏰ ${due}/${b.words.length} por repasar`}
+                {done?"✓ Al día":`⏰ ${st.due} por repasar`}{st.fresh>0&&<span style={{color:C.inkSoft,fontWeight:400}}> · ✨ {st.fresh} nuevas</span>}
               </div>
             </button>);
         })}
@@ -2730,14 +2862,15 @@ function Vocabulary({registerActivity,state}){
     </div>
   );
 
-  const blockDue=dueOf(block);
+  const blockStats=statsOf(block);
+  const newLeft=Math.max(0,VOCAB_NEW_PER_DAY-vocabNewToday());
 
   // ── Vista de bloque ──
   return(
     <div className="fadein">
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8}}>
         <button onClick={()=>{setBlock(null);setCurrent(null);}} style={{border:"none",background:"transparent",color:C.blue,fontSize:13,fontWeight:600,flexShrink:0}}>← Bloques</button>
-        <span style={{fontSize:12,color:C.inkSoft,textAlign:"center"}}>{block.icon} {block.name}<br/>⏰ {blockDue} por repasar</span>
+        <span style={{fontSize:12,color:C.inkSoft,textAlign:"center"}}>{block.icon} {block.name}<br/>⏰ {blockStats.due} por repasar · ✨ {Math.min(blockStats.fresh,newLeft)} nuevas hoy</span>
         <button onClick={()=>setShowList(v=>!v)}
           style={{border:`1.5px solid ${C.blue}`,background:showList?C.blueSoft:"transparent",color:C.blue,fontSize:12,fontWeight:600,borderRadius:10,padding:"6px 10px",flexShrink:0}}>
           {showList?"🎴 Tarjetas":"📋 Lista"}
@@ -2825,7 +2958,7 @@ function Vocabulary({registerActivity,state}){
         ):(
           <div className="fadein" style={{background:C.greenSoft,border:`1px solid ${C.green}`,borderRadius:16,padding:20,textAlign:"center"}}>
             <p style={{fontWeight:600,color:C.green,marginBottom:4}}>✓ Bloque al día</p>
-            <p style={{fontSize:13,color:C.inkSoft,marginBottom:12}}>Dominaste las palabras pendientes de hoy. Vuelve mañana o repasa extra.</p>
+            <p style={{fontSize:13,color:C.inkSoft,marginBottom:12}}>{blockStats.fresh>0&&newLeft===0?`Completaste tus ${VOCAB_NEW_PER_DAY} palabras nuevas de hoy 🎉. Mañana se desbloquean más — así tu memoria las retiene de verdad.`:"Dominaste las palabras pendientes de hoy. Vuelve mañana o repasa extra."}</p>
             <button onClick={()=>pick(block,true)}
               style={{padding:"10px 18px",borderRadius:12,border:`1.5px solid ${C.green}`,background:"transparent",color:C.green,fontWeight:600,fontSize:14}}>
               🎲 Repasar una al azar igual
