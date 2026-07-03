@@ -986,17 +986,24 @@ function DailyReview({state,onStart}){
 // ============================================================
 // RECONOCIMIENTO DE VOZ — dictado en inglés (Chrome/Android)
 // ============================================================
-function useSpeechRec(onText){
+function useSpeechRec(onText,onEnd){
   const Rec=typeof window!=="undefined"&&(window.SpeechRecognition||window.webkitSpeechRecognition);
   const supported=!!Rec;
   const [listening,setListening]=useState(false);
   const recRef=useRef(null);
+  const endedRef=useRef(false);
   const start=()=>{
     if(!supported||listening) return;
     try{
       const r=new Rec();
       r.lang="en-US"; r.interimResults=true; r.continuous=false; r.maxAlternatives=1;
       let finalT="";
+      endedRef.current=false;
+      const finish=(err)=>{
+        if(endedRef.current) return; endedRef.current=true;
+        setListening(false);
+        if(onEnd) onEnd(err||null);
+      };
       r.onresult=(e)=>{
         let interim="";
         for(let i=e.resultIndex;i<e.results.length;i++){
@@ -1005,12 +1012,12 @@ function useSpeechRec(onText){
         }
         onText((finalT+interim).trim());
       };
-      r.onend=()=>setListening(false);
-      r.onerror=()=>setListening(false);
+      r.onend=()=>finish(null);
+      r.onerror=(e)=>finish(e&&e.error||"error");
       recRef.current=r; setListening(true); r.start();
-    }catch(e){ setListening(false); }
+    }catch(e){ setListening(false); if(onEnd) onEnd("start-failed"); }
   };
-  const stop=()=>{ try{recRef.current&&recRef.current.stop();}catch(e){} setListening(false); };
+  const stop=()=>{ try{recRef.current&&recRef.current.stop();}catch(e){} };
   return {supported,listening,start,stop};
 }
 
@@ -1020,30 +1027,60 @@ function useSpeechRec(onText){
 function normEn(t){return (t||"").toLowerCase().replace(/[^a-z0-9' ]+/g," ").replace(/\s+/g," ").trim();}
 function PronounceCheck({target}){
   const [heard,setHeard]=useState("");
-  const {supported,listening,start,stop}=useSpeechRec(t=>setHeard(t));
+  const [status,setStatus]=useState("idle"); // idle | listening | done | empty
+  const heardRef=useRef("");
+  const endGuard=useRef(0);
+  const {supported,listening,start,stop}=useSpeechRec(
+    t=>{heardRef.current=t;setHeard(t);},
+    (err)=>{
+      endGuard.current=Date.now();
+      // pequeño margen: en Android el resultado final puede llegar justo después del onend
+      setTimeout(()=>{
+        setStatus(heardRef.current.trim()?"done":(err==="not-allowed"?"denied":"empty"));
+      },180);
+    }
+  );
   if(!supported) return null;
+  const begin=()=>{ heardRef.current="";setHeard("");setStatus("listening");start(); };
+  const tap=()=>{
+    if(status==="listening"&&listening){ stop(); return; }
+    // Si el mic se auto-cortó hace <700ms, este toque era para "detener": no reiniciar
+    if(Date.now()-endGuard.current<700) return;
+    begin();
+  };
   const tw=normEn(target).split(" ").filter(Boolean);
   const hw=new Set(normEn(heard).split(" ").filter(Boolean));
   const hits=tw.filter(w=>hw.has(w)).length;
   const score=tw.length?Math.round(hits/tw.length*100):0;
   const color=score>=80?C.green:score>=50?"#E8A020":C.coral;
   const msg=score>=80?"¡Excelente pronunciación! 🎉":score>=50?"Bien — repite las palabras en rojo.":"Escucha de nuevo e inténtalo otra vez.";
+  const label=status==="listening"?"⏹ Detener":status==="done"?"🎤 Otra vez":status==="empty"?"🎤 Reintentar":"🎤 Pronunciar";
   return(
     <div style={{marginTop:10,background:C.paper,borderRadius:12,padding:"10px 12px"}}>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
-        <button onClick={()=>{if(listening){stop();}else{setHeard("");start();}}}
-          style={{padding:"7px 12px",borderRadius:999,border:`1.5px solid ${listening?C.coral:C.blue}`,background:listening?C.coralSoft:C.blueSoft,color:listening?C.coral:C.blue,fontWeight:700,fontSize:13}}>
-          {listening?"⏹ Escuchando…":"🎤 Pronunciar"}
+        <button onClick={tap}
+          style={{padding:"7px 12px",borderRadius:999,border:`1.5px solid ${status==="listening"?C.coral:C.blue}`,background:status==="listening"?C.coralSoft:C.blueSoft,color:status==="listening"?C.coral:C.blue,fontWeight:700,fontSize:13}}>
+          {label}
         </button>
-        {heard&&!listening&&<span style={{fontWeight:700,color,fontSize:16}}>{score}%</span>}
+        {status==="listening"&&<span style={{fontSize:13,color:C.inkSoft}}>🎙️ Te escucho — habla ahora…</span>}
+        {status==="done"&&<span style={{fontWeight:700,color,fontSize:16}}>{score}%</span>}
       </div>
-      {heard&&(
+      {status==="listening"&&heard&&(
+        <p style={{margin:"8px 0 0",fontSize:13,color:C.inkSoft,fontStyle:"italic"}}>"{heard}"</p>
+      )}
+      {status==="done"&&(
         <div className="fadein" style={{marginTop:8}}>
           <p style={{margin:0,fontSize:15,lineHeight:1.6,fontFamily:FEN}}>
             {tw.map((w,i)=><span key={i} style={{color:hw.has(w)?C.green:C.coral,fontWeight:hw.has(w)?400:700,marginRight:5}}>{w}</span>)}
           </p>
-          {!listening&&<p style={{margin:"4px 0 0",fontSize:12,color:C.inkSoft}}>{msg} <span style={{fontStyle:"italic"}}>Escuché: "{heard}"</span></p>}
+          <p style={{margin:"4px 0 0",fontSize:12,color:C.inkSoft}}>{msg} <span style={{fontStyle:"italic"}}>Escuché: "{heard}"</span></p>
         </div>
+      )}
+      {status==="empty"&&(
+        <p className="fadein" style={{margin:"8px 0 0",fontSize:12,color:C.inkSoft}}>🤔 No capté tu voz. Toca <strong>Reintentar</strong> y habla apenas aparezca "te escucho" — fuerte y cerca del micrófono.</p>
+      )}
+      {status==="denied"&&(
+        <p className="fadein" style={{margin:"8px 0 0",fontSize:12,color:C.coral}}>🎙️ Chrome bloqueó el micrófono. Actívalo en el candado de la barra de direcciones → Permisos → Micrófono.</p>
       )}
     </div>
   );
