@@ -527,7 +527,7 @@ function App(){
         {tab==="home"     && <Home     state={state} save={save} go={setTab}/>}
         {tab==="talk"     && <Talk     state={state} registerActivity={registerActivity}/>}
         {(tab==="phrases"||tab==="grammar") && <Phrases key={tab} initialMode={tab==="grammar"?"grammar":(tab==="phrases"&&(state.level==="A0"||state.level==="A2")?"vocab":"cards")} state={state} save={save} registerActivity={registerActivity}/>}
-        {tab==="listen"   && <Listen   state={state} save={save} registerActivity={registerActivity}/>}
+        {tab==="listen"   && <ListenHub state={state} save={save} registerActivity={registerActivity}/>}
         {tab==="write"    && <Write    state={state} registerActivity={registerActivity}/>}
         {tab==="levelcheck" && <LevelCheck state={state} save={save} go={setTab}/>}
         {tab==="settings" && <Settings state={state} save={save} onAIChanged={handleAIChanged} onThemeChange={handleThemeChange}/>}
@@ -1768,6 +1768,209 @@ function LevelCheck({state,save,go}){
   );
 }
 
+
+// ============================================================
+// 📖 HISTORIA — mini-cuento interactivo por capítulos
+// ============================================================
+function storyLoad(){try{return JSON.parse(sessionStorage.getItem("fluido-story")||"null");}catch(e){return null;}}
+function storySave(s){try{sessionStorage.setItem("fluido-story",JSON.stringify(s));}catch(e){}}
+
+function Story({state,registerActivity}){
+  const sv=storyLoad();
+  const [story,setStory]=useState(sv?.story||null);
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState(null);
+  const [showEs,setShowEs]=useState({});
+  const [shadow,setShadow]=useState(false);
+  const [rate,setRate]=useState(1.0);
+  const {speak,stop,failed}=useSpeech();
+  const [topicSugs]=useState(()=>[...LISTEN_TOPICS].sort(()=>Math.random()-0.5).slice(0,8));
+  const personal=loadPersonalTopics().topics;
+  useEffect(()=>{ storySave({story}); },[story]);
+
+  const lvlDesc=LISTEN_LEVEL_DESC[state.level]||"intermedio";
+  const sys=`Eres un escritor de mini-cuentos para estudiantes de inglés nivel ${state.level}. Historias simples, vívidas y con gancho, coherentes de capítulo a capítulo. Inglés 100% natural (contracciones, ritmo de nativo), nunca robótico ni telegráfico.`;
+
+  const startStory=async(topicOverride)=>{
+    setLoading(true);setError(null);setStory(null);setShowEs({});setShadow(false);stop();
+    try{sessionStorage.removeItem("fluido-story");}catch(e){}
+    try{
+      const topic=topicOverride||pickListenTopic(personal);
+      const data=await askAI_JSON(
+        `Escribe el CAPÍTULO 1 de un mini-cuento interactivo en inglés para practicar lectura y escucha. Tema/situación del cuento: ${topic.en}.\n\nREGLA MÁS IMPORTANTE — nivel del estudiante: ${state.level} (${lvlDesc}). CADA oración debe cumplirla; ante la duda, hazla MÁS simple.\n\nEl capítulo: 4-6 oraciones, un protagonista con nombre poco común, algo concreto pasa (no pura descripción), y termina justo en un momento de decisión con suspenso. Dale un giro inesperado (semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve SOLO JSON: {"title_es":"título del cuento en español","sentences":[{"en":"oración en inglés","es":"traducción"}],"choice":{"question_es":"pregunta de la decisión en español","options":[{"en":"opción A en inglés del mismo nivel","es":"traducción"},{"en":"opción B en inglés del mismo nivel","es":"traducción"}]}}`,
+        sys);
+      if(!data.sentences||!data.choice) throw Object.assign(new Error("bad"),{userMsg:"La IA devolvió una historia incompleta. Intenta de nuevo."});
+      setStory({topic_es:topic.es,title_es:data.title_es,pages:[{sentences:data.sentences,choice:data.choice,chosen:null}],finished:false});
+      registerActivity("listen");
+    }catch(e){setError(e.userMsg||"Error creando la historia. Revisa tu clave de IA en Ajustes.");}
+    setLoading(false);
+  };
+
+  const choose=async(optIdx)=>{
+    if(!story||loading) return;
+    setLoading(true);setError(null);
+    const isLast=story.pages.length>=2; // el capítulo 3 cierra
+    const soFar=story.pages.map((p,i)=>`Capítulo ${i+1}: `+p.sentences.map(s=>s.en).join(" ")).join("\n");
+    const chosen=story.pages[story.pages.length-1].choice.options[optIdx];
+    try{
+      const data=await askAI_JSON(
+        `Continúa este mini-cuento interactivo en inglés.\n\nREGLA MÁS IMPORTANTE — nivel ${state.level} (${lvlDesc}); ante la duda, más simple.\n\nHistoria hasta ahora:\n${soFar}\n\nEl lector decidió: "${chosen.en}".\n\n${isLast
+          ?'Escribe el CAPÍTULO FINAL (4-6 oraciones): sigue esa decisión y cierra la historia de forma satisfactoria y memorable. Devuelve SOLO JSON: {"sentences":[{"en":"...","es":"..."}],"key_phrase_en":"una expresión útil que apareció en el cuento","key_phrase_es":"su traducción"}'
+          :'Escribe el CAPÍTULO 2 (4-6 oraciones): sigue esa decisión, algo nuevo pasa, y termina en otro momento de decisión. Devuelve SOLO JSON: {"sentences":[{"en":"...","es":"..."}],"choice":{"question_es":"...","options":[{"en":"...","es":"..."},{"en":"...","es":"..."}]}}'}`,
+        sys);
+      if(!data.sentences) throw Object.assign(new Error("bad"),{userMsg:"La IA devolvió un capítulo incompleto. Intenta de nuevo."});
+      setStory(st=>({...st,
+        pages:[...st.pages.map((p,i)=>i===st.pages.length-1?{...p,chosen:optIdx}:p),{sentences:data.sentences,choice:data.choice||null,chosen:null}],
+        finished:isLast,
+        key_phrase_en:data.key_phrase_en||st.key_phrase_en,
+        key_phrase_es:data.key_phrase_es||st.key_phrase_es}));
+      registerActivity("listen");
+    }catch(e){setError(e.userMsg||"Error continuando la historia. Intenta de nuevo.");}
+    setLoading(false);
+  };
+
+  const chip=(t,keyPrefix)=>(
+    <button key={keyPrefix+t.id} onClick={()=>startStory(t)}
+      style={{padding:"9px 14px",borderRadius:999,border:`1.5px solid ${C.line}`,background:C.paper,color:C.ink,fontSize:13,fontWeight:600,whiteSpace:"nowrap",justifySelf:"start"}}>
+      {t.es}
+    </button>);
+
+  if(!story&&!loading) return(
+    <div className="fadein">
+      <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:20}}>
+        <p style={{fontFamily:FEN,fontSize:18,marginBottom:4,textAlign:"center"}}>Read. Listen. Decide.</p>
+        <p style={{fontSize:13,color:C.inkSoft,textAlign:"center",marginBottom:14}}>Un mini-cuento de 3 capítulos donde tú decides qué pasa. Tus decisiones son en inglés — entenderlas es parte del juego.</p>
+        <BigButton onClick={()=>startStory()}>📖 Nueva historia (sorpresa)</BigButton>
+        {error&&<p style={{fontSize:13,color:C.coral,marginTop:10,textAlign:"center"}}>{error}</p>}
+        {personal.length>0&&(
+          <div style={{marginTop:14}}>
+            <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"0 0 8px"}}>✨ Tus temas</p>
+            <div style={{position:"relative"}}>
+              <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:6,paddingRight:24,WebkitOverflowScrolling:"touch"}}>
+                {personal.map(t=><span key={t.id} style={{flexShrink:0}}>{chip(t,"p")}</span>)}
+              </div>
+              <div style={{position:"absolute",top:0,right:0,bottom:6,width:26,background:`linear-gradient(90deg, transparent, ${C.card})`,pointerEvents:"none"}}/>
+            </div>
+          </div>
+        )}
+        <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"14px 0 8px"}}>O elige una situación</p>
+        <div style={{position:"relative"}}>
+          <div style={{display:"grid",gridAutoFlow:"column",gridTemplateRows:"auto auto",gap:8,overflowX:"auto",paddingBottom:6,paddingRight:24,WebkitOverflowScrolling:"touch",justifyContent:"start"}}>
+            {topicSugs.map(t=>chip(t,"g"))}
+          </div>
+          <div style={{position:"absolute",top:0,right:0,bottom:6,width:26,background:`linear-gradient(90deg, transparent, ${C.card})`,pointerEvents:"none"}}/>
+        </div>
+      </div>
+    </div>
+  );
+
+  if(loading&&!story) return <p className="fadein" style={{fontSize:14,color:C.inkSoft,textAlign:"center",padding:30}}>✍️ Escribiendo tu historia…</p>;
+
+  const lastPage=story.pages[story.pages.length-1];
+  return(
+    <div className="fadein">
+      <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8}}>
+          <strong style={{fontSize:16}}>📖 {story.title_es}</strong>
+          {story.topic_es&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:999,background:C.paper,border:`1px solid ${C.line}`,color:C.inkSoft,flexShrink:0}}>{story.topic_es}</span>}
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <button onClick={()=>setShadow(v=>!v)}
+            style={{padding:"7px 12px",borderRadius:999,border:`1.5px solid ${shadow?C.green:C.line}`,background:shadow?C.greenSoft:"transparent",color:shadow?C.green:C.inkSoft,fontWeight:700,fontSize:12}}>
+            🗣️ Shadowing {shadow?"ON":"OFF"}
+          </button>
+          {SPEEDS.map(s=>(
+            <button key={s.v} onClick={()=>setRate(s.v)}
+              style={{padding:"7px 10px",borderRadius:999,border:`1.5px solid ${rate===s.v?C.blue:C.line}`,background:rate===s.v?C.blueSoft:"transparent",color:rate===s.v?C.blue:C.inkSoft,fontWeight:600,fontSize:12}}>
+              {s.l}
+            </button>
+          ))}
+        </div>
+        {failed&&<AudioWarning/>}
+      </div>
+
+      {story.pages.map((p,pi)=>(
+        <div key={pi} className="fadein" style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:0}}>Capítulo {pi+1}{pi===2?" · Final":""}</p>
+            <button onClick={()=>speak(p.sentences.map(s=>s.en).join(" "),{rate})} aria-label="Escuchar capítulo"
+              style={{border:`1.5px solid ${C.blue}`,background:C.blueSoft,color:C.blue,borderRadius:999,padding:"6px 12px",fontSize:12,fontWeight:700}}>▶ Capítulo</button>
+          </div>
+          {p.sentences.map((s,si)=>{
+            const k=pi+"-"+si;
+            return(
+              <div key={si} style={{marginBottom:shadow?12:6}}>
+                <p style={{margin:0,lineHeight:1.6}}>
+                  <span style={{fontFamily:FEN,fontSize:16.5}}>{s.en}</span>{" "}
+                  <button onClick={()=>speak(s.en,{rate})} aria-label="Escuchar oración" style={{border:"none",background:"transparent",fontSize:15,padding:0}}>🔊</button>
+                </p>
+                {s.es&&(showEs[k]
+                  ?<span onClick={()=>setShowEs(m=>({...m,[k]:false}))} style={{display:"block",fontSize:12,color:C.inkSoft,fontStyle:"italic",cursor:"pointer"}}>🇪🇸 {s.es}</span>
+                  :<button onClick={()=>setShowEs(m=>({...m,[k]:true}))} style={{display:"block",padding:0,border:"none",background:"transparent",fontSize:11,color:C.inkSoft,textDecoration:"underline dotted",opacity:0.7}}>🇪🇸 traducción</button>)}
+                {shadow&&<PronounceCheck target={s.en}/>}
+              </div>);
+          })}
+          {p.choice&&(
+            <div style={{marginTop:14,paddingTop:12,borderTop:`1px dashed ${C.line}`}}>
+              <p style={{fontWeight:600,fontSize:14,marginBottom:8}}>🔀 {p.choice.question_es}</p>
+              {p.choice.options.map((o,oi)=>{
+                const picked=p.chosen===oi, decided=p.chosen!==null&&p.chosen!==undefined;
+                return(
+                  <button key={oi} onClick={()=>!decided&&pi===story.pages.length-1&&choose(oi)} disabled={decided||loading}
+                    style={{display:"block",width:"100%",textAlign:"left",marginBottom:8,padding:"11px 14px",borderRadius:12,
+                      border:`1.5px solid ${picked?C.green:C.line}`,background:picked?C.greenSoft:"transparent",
+                      color:picked?C.green:C.ink,fontWeight:picked?700:500,fontSize:14,opacity:decided&&!picked?0.45:1}}>
+                    <span style={{fontFamily:FEN}}>{o.en}</span>
+                    {picked&&<span style={{fontSize:12,display:"block",color:C.inkSoft,fontStyle:"italic"}}>🇪🇸 {o.es}</span>}
+                  </button>);
+              })}
+              {loading&&pi===story.pages.length-1&&<p style={{fontSize:13,color:C.inkSoft,margin:"4px 0 0"}}>✍️ Escribiendo el siguiente capítulo…</p>}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {error&&<p style={{fontSize:13,color:C.coral,marginBottom:10,textAlign:"center"}}>{error}</p>}
+
+      {story.finished&&(
+        <div className="fadein">
+          {story.key_phrase_en&&(
+            <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:12}}>
+              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,marginBottom:6}}>Expresión para tu mochila</p>
+              <p style={{margin:0,fontSize:15}}><span className="hl" style={{fontFamily:FEN}}>{story.key_phrase_en}</span> — {story.key_phrase_es}
+                <button onClick={()=>speak(story.key_phrase_en,{rate})} style={{border:"none",background:"transparent",fontSize:15,marginLeft:6}}>🔊</button>
+              </p>
+            </div>
+          )}
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>startStory()} style={{flex:1,padding:14,borderRadius:14,border:`2px dashed ${C.blue}`,background:"transparent",color:C.blue,fontWeight:600,fontSize:15}}>📖 Otra historia</button>
+            <button onClick={()=>{setStory(null);setError(null);try{sessionStorage.removeItem("fluido-story");}catch(e){}}}
+              style={{flex:1,padding:14,borderRadius:14,border:`2px dashed ${C.green}`,background:"transparent",color:C.green,fontWeight:600,fontSize:15}}>🎯 Elegir tema</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Hub de Escuchar: alterna entre diálogos e historias
+function ListenHub(props){
+  const [mode,setMode]=useState("dialog");
+  const pill=(id,label)=>(
+    <button onClick={()=>setMode(id)}
+      style={{flex:1,padding:"10px 12px",borderRadius:12,border:`1.5px solid ${mode===id?C.green:C.line}`,background:mode===id?C.greenSoft:"transparent",color:mode===id?C.green:C.inkSoft,fontWeight:700,fontSize:14}}>
+      {label}
+    </button>);
+  return(
+    <div>
+      <div style={{display:"flex",gap:8,marginBottom:14}}>
+        {pill("dialog","🎧 Diálogos")}
+        {pill("story","📖 Historia")}
+      </div>
+      {mode==="dialog"?<Listen {...props}/>:<Story state={props.state} registerActivity={props.registerActivity}/>}
+    </div>
+  );
+}
 
 function Listen({state,save,registerActivity}){
   const sv=listenLoad();
