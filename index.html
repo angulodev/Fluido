@@ -456,9 +456,21 @@ function AudioWarning(){
 // ============================================================
 // APP RAÍZ
 // ============================================================
+const APP_TABS=["home","talk","phrases","grammar","listen","write","levelcheck","settings"];
+const tabFromHash=()=>{try{const h=(location.hash||"").replace(/^#\/?/,"");return APP_TABS.includes(h)?h:"home";}catch(e){return "home";}};
 function App(){
   const [state,setState]=useState(loadState);
-  const [tab,setTab]=useState("home");
+  const [tab,setTabRaw]=useState(tabFromHash);
+  // Cada pestaña tiene su ruta (#/listen, #/talk…): sobrevive recargas y habilita el botón atrás
+  const setTab=useCallback((id)=>{
+    setTabRaw(id);
+    try{ if(tabFromHash()!==id) location.hash="/"+id; }catch(e){}
+  },[]);
+  useEffect(()=>{
+    const onHash=()=>setTabRaw(tabFromHash());
+    window.addEventListener("hashchange",onHash);
+    return()=>window.removeEventListener("hashchange",onHash);
+  },[]);
   const [aiReady,setAiReady]=useState(()=>isAIReady());
   const desktop=useIsDesktop();
   const [themeVer,setThemeVer]=useState(0); // fuerza re-render al cambiar tema
@@ -545,6 +557,7 @@ function Shell({children}){
 // SETUP
 // ============================================================
 function Setup({onDone}){
+  const [intro,setIntro]=useState(0); // 0: bienvenida · 1: cómo funciona la IA · 2: conectar clave
   const [selected,setSelected]=useState(null);
   const [key,setKey]=useState("");
   const [testing,setTesting]=useState(false);
@@ -561,11 +574,58 @@ function Setup({onDone}){
     }catch(e){setError(e.userMsg||"No pude conectar. Revisa tu clave e intenta de nuevo.");}
     setTesting(false);
   };
+  const dots=(
+    <div style={{display:"flex",gap:6,justifyContent:"center",margin:"18px 0 0"}}>
+      {[0,1,2].map(i=><span key={i} style={{width:8,height:8,borderRadius:99,background:i===intro?C.blue:C.line}}/>)}
+    </div>);
+
+  // ── Paso 0: qué es Fluido ──
+  if(intro===0) return(
+    <div className="fadein">
+      <h1 style={{fontSize:38,fontWeight:700,margin:"18px 0 2px"}}>Fluido<span style={{color:C.blue}}>.</span></h1>
+      <p style={{fontFamily:FEN,fontStyle:"italic",fontSize:17,color:C.inkSoft,marginBottom:20}}>"You don't learn a language. <span className="hl">You get used to it.</span>"</p>
+      <p style={{fontSize:15,lineHeight:1.7,marginBottom:16}}>Tu entrenador personal de inglés, hecho para hispanohablantes que entienden al leer pero se bloquean al <strong>hablar</strong> y <strong>escuchar</strong>.</p>
+      <div style={{display:"grid",gap:10,marginBottom:8}}>
+        {[["🎧","Escucha diálogos e historias interactivas a tu nivel exacto"],
+          ["🎤","Practica pronunciación: la app te escucha y te puntúa palabra por palabra"],
+          ["💬","Conversa por texto o voz con corrección instantánea"],
+          ["🧠","Repaso inteligente de frases, verbos y +2.900 palabras para no olvidar"]].map(([e,t],i)=>(
+          <div key={i} style={{display:"flex",gap:12,alignItems:"flex-start",background:C.card,border:`1px solid ${C.line}`,borderRadius:14,padding:"12px 14px"}}>
+            <span style={{fontSize:22}}>{e}</span><span style={{fontSize:14,lineHeight:1.5}}>{t}</span>
+          </div>))}
+      </div>
+      <div style={{marginTop:16}}><BigButton onClick={()=>setIntro(1)}>Continuar →</BigButton></div>
+      {dots}
+    </div>
+  );
+
+  // ── Paso 1: cómo funciona (IA) y privacidad ──
+  if(intro===1) return(
+    <div className="fadein">
+      <h2 style={{fontSize:26,fontWeight:700,margin:"18px 0 14px"}}>✨ Todo se crea para ti, con IA</h2>
+      <p style={{fontSize:15,lineHeight:1.7,marginBottom:14}}>Fluido no trae lecciones enlatadas: los diálogos, historias, conversaciones y correcciones se <strong>generan al momento con inteligencia artificial</strong>, según tu nivel, tu trabajo y tus intereses.</p>
+      <p style={{fontSize:15,lineHeight:1.7,marginBottom:14}}>Para eso necesita conectarse a un proveedor de IA <strong>con tu propia clave</strong> (hay opción gratuita). En el siguiente paso te mostramos cómo obtenerla en 2 minutos.</p>
+      <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:14,padding:"14px 16px",marginBottom:8}}>
+        <p style={{fontWeight:700,fontSize:14,marginBottom:8}}>🔒 Tu privacidad, en corto</p>
+        <ul style={{margin:0,paddingLeft:18,fontSize:13.5,lineHeight:1.8,color:C.inkSoft}}>
+          <li>Tu clave se guarda <strong>solo en este navegador</strong> (localStorage). Fluido no tiene servidores: nada se envía a nadie más.</li>
+          <li>Se usa únicamente para hablar directo con el proveedor que TÚ elijas (Google, Anthropic, etc.).</li>
+          <li>Tu progreso también vive solo en tu dispositivo, con respaldo exportable.</li>
+          <li>Puedes ver, cambiar o borrar la clave cuando quieras en <strong>Ajustes</strong>.</li>
+        </ul>
+      </div>
+      <div style={{marginTop:16}}><BigButton onClick={()=>setIntro(2)}>Entendido, conectar IA →</BigButton></div>
+      <button onClick={()=>setIntro(0)} style={{width:"100%",marginTop:8,padding:10,border:"none",background:"transparent",color:C.inkSoft,fontSize:13,textDecoration:"underline"}}>← Volver</button>
+      {dots}
+    </div>
+  );
+
+  // ── Paso 2: conectar clave ──
   return(
     <div className="fadein">
-      <h1 style={{fontSize:34,fontWeight:700,margin:"8px 0 2px"}}>Fluido<span style={{color:C.blue}}>.</span></h1>
-      <p style={{fontFamily:FEN,fontStyle:"italic",fontSize:16,color:C.inkSoft,marginBottom:22}}>Tu entrenador de inglés. <span className="hl">Elige cómo conectarlo.</span></p>
-      <p style={{fontSize:13,color:C.inkSoft,marginBottom:12,lineHeight:1.6}}>Fluido usa IA para crear tus ejercicios. Elige un proveedor y conecta tu clave. <strong>Tu clave se guarda solo en este navegador, nunca se comparte.</strong></p>
+      <h1 style={{fontSize:30,fontWeight:700,margin:"8px 0 2px"}}>Conecta tu IA</h1>
+      <p style={{fontFamily:FEN,fontStyle:"italic",fontSize:16,color:C.inkSoft,marginBottom:16}}><span className="hl">Elige un proveedor.</span></p>
+      <p style={{fontSize:13,color:C.inkSoft,marginBottom:12,lineHeight:1.6}}>💡 Recomendado para empezar: <strong>Google Gemini</strong> tiene capa gratuita. Recuerda: tu clave queda solo en este navegador.</p>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
         {PROVIDERS.map(p=>(
           <button key={p.id} onClick={()=>{setSelected(p.id);setKey("");setError(null);}}
@@ -588,6 +648,8 @@ function Setup({onDone}){
           <BigButton onClick={handleConnect} disabled={!key.trim()||testing}>{testing?"Probando conexión…":"Conectar y continuar →"}</BigButton>
         </div>
       )}
+      <button onClick={()=>setIntro(1)} style={{width:"100%",marginTop:10,padding:10,border:"none",background:"transparent",color:C.inkSoft,fontSize:13,textDecoration:"underline"}}>← Volver</button>
+      {dots}
     </div>
   );
 }
