@@ -701,13 +701,13 @@ function Onboarding({onDone}){
     // Paso 6: ¿quieres datos extra?
     {title:"¿Quieres escenarios ultra-personalizados? 🎯",sub:"Con un poco más de info, la IA puede crear situaciones que realmente sientan tuyas. Completamente opcional.",
      content:(
-       wantExtra===null?(
+       wantExtra!==true?(
          <div style={{display:"flex",flexDirection:"column",gap:10,marginTop:4}}>
            <button onClick={()=>setWantExtra(true)} style={{padding:"14px 16px",borderRadius:14,border:`2px solid ${C.blue}`,background:C.blueSoft,color:C.blue,fontWeight:600,fontSize:15}}>
              ✨ Sí, agregar información extra
            </button>
-           <button onClick={()=>setWantExtra(false)} style={{padding:"14px 16px",borderRadius:14,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:500,fontSize:14}}>
-             No por ahora, continuar
+           <button onClick={()=>onDone(buildProfile())} style={{padding:"14px 16px",borderRadius:14,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:500,fontSize:14}}>
+             No por ahora, ¡empezar a entrenar! →
            </button>
          </div>
        ):(
@@ -753,7 +753,7 @@ function Onboarding({onDone}){
       {s.content}
       <div style={{display:"flex",gap:10,marginTop:28}}>
         {step>0&&<button onClick={()=>setStep(step-1)} style={{padding:"14px 18px",borderRadius:14,border:`1.5px solid ${C.line}`,background:C.card,color:C.inkSoft,fontWeight:600}}>Atrás</button>}
-        {(last?wantExtra!==null:s.valid)&&(
+        {(last?wantExtra===true:s.valid)&&(
           <button onClick={()=>{if(!s.valid)return;if(last)onDone(buildProfile());else setStep(step+1);}} disabled={!s.valid}
             style={{flex:1,padding:"14px 18px",borderRadius:14,border:"none",background:C.blue,color:"#fff",fontWeight:600,fontSize:16,opacity:s.valid?1:0.4}}>
             {last?"¡Empezar a entrenar!":"Siguiente"}
