@@ -1105,6 +1105,45 @@ function useSpeechRec(onText,onEnd){
 // PRÁCTICA DE PRONUNCIACIÓN — compara lo dicho contra el objetivo
 // ============================================================
 function normEn(t){return (t||"").toLowerCase().replace(/[^a-z0-9' ]+/g," ").replace(/\s+/g," ").trim();}
+// Chips sin scroll horizontal: muestra pocos envueltos + hoja inferior con el catálogo completo
+function ChipsWithSheet({items,onPick,limit,title}){
+  const [open,setOpen]=useState(false);
+  const lim=limit||5;
+  const chip=(t)=>(
+    <button key={t.id} onClick={()=>{setOpen(false);onPick(t);}}
+      style={{padding:"9px 14px",borderRadius:999,border:`1.5px solid ${C.line}`,background:C.card,color:C.ink,fontSize:13,fontWeight:600}}>
+      {t.es}
+    </button>);
+  return(
+    <div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+        {items.slice(0,lim).map(chip)}
+        {items.length>lim&&(
+          <button onClick={()=>setOpen(true)}
+            style={{padding:"9px 14px",borderRadius:999,border:`1.5px dashed ${C.blue}`,background:C.blueSoft,color:C.blue,fontSize:13,fontWeight:700}}>
+            Ver todos ({items.length})
+          </button>
+        )}
+      </div>
+      {open&&(
+        <div onClick={()=>setOpen(false)}
+          style={{position:"fixed",inset:0,zIndex:300,background:"rgba(15,23,42,.45)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+          <div className="elev fadein" onClick={e=>e.stopPropagation()}
+            style={{width:"100%",maxWidth:560,maxHeight:"75vh",overflowY:"auto",background:C.paper,borderRadius:"22px 22px 0 0",padding:"18px 16px calc(24px + env(safe-area-inset-bottom, 0px))"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <strong style={{fontSize:16}}>{title||"Elige una situación"}</strong>
+              <button onClick={()=>setOpen(false)} aria-label="Cerrar" style={{border:"none",background:"transparent",fontSize:20,color:C.inkSoft,padding:4}}>✕</button>
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              {items.map(chip)}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PronounceCheck({target}){
   const [heard,setHeard]=useState("");
   const [status,setStatus]=useState("idle"); // idle | listening | done | empty
@@ -1250,17 +1289,7 @@ function Talk({state,registerActivity}){
               {(()=>{const pt=loadPersonalTopics().topics;if(!pt.length)return null;return(
                 <div style={{marginTop:14}}>
                   <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"0 0 8px"}}>✨ O conversa sobre tus temas</p>
-                  <div style={{position:"relative"}}>
-                    <div style={{display:"grid",gridAutoFlow:"column",gridTemplateRows:pt.length>2?"auto auto":"auto",gap:8,overflowX:"auto",paddingBottom:6,paddingRight:24,WebkitOverflowScrolling:"touch",justifyContent:"start"}}>
-                      {pt.map(t=>(
-                        <button key={t.id} onClick={()=>newScenario(t.en)}
-                          style={{padding:"9px 14px",borderRadius:999,border:`1.5px solid ${C.line}`,background:C.paper,color:C.ink,fontSize:13,fontWeight:600,whiteSpace:"nowrap",justifySelf:"start"}}>
-                          {t.es}
-                        </button>
-                      ))}
-                    </div>
-                    <div style={{position:"absolute",top:0,right:0,bottom:6,width:26,background:`linear-gradient(90deg, transparent, ${C.card})`,pointerEvents:"none"}}/>
-                  </div>
+                  <ChipsWithSheet items={pt} onPick={t=>newScenario(t.en)} limit={4} title="✨ Tus temas"/>
                 </div>);})()}
             </div>
           ):(
@@ -1633,17 +1662,7 @@ function Write({state,registerActivity}){
           {(()=>{const pt=loadPersonalTopics().topics;if(!pt.length)return null;return(
             <div style={{marginTop:14}}>
               <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"0 0 8px"}}>✨ O escribe sobre tus temas</p>
-              <div style={{position:"relative"}}>
-                <div style={{display:"grid",gridAutoFlow:"column",gridTemplateRows:pt.length>2?"auto auto":"auto",gap:8,overflowX:"auto",paddingBottom:6,paddingRight:24,WebkitOverflowScrolling:"touch",justifyContent:"start"}}>
-                  {pt.map(t=>(
-                    <button key={t.id} onClick={()=>newPrompt(t.en)}
-                      style={{padding:"9px 14px",borderRadius:999,border:`1.5px solid ${C.line}`,background:C.card,color:C.ink,fontSize:13,fontWeight:600,whiteSpace:"nowrap",justifySelf:"start"}}>
-                      {t.es}
-                    </button>
-                  ))}
-                </div>
-                <div style={{position:"absolute",top:0,right:0,bottom:6,width:26,background:`linear-gradient(90deg, transparent, ${C.bg})`,pointerEvents:"none"}}/>
-              </div>
+              <ChipsWithSheet items={pt} onPick={t=>newPrompt(t.en)} limit={4} title="✨ Tus temas"/>
             </div>);})()}
         </div>
       )}
@@ -1962,21 +1981,11 @@ function Story({state,registerActivity}){
         {personal.length>0&&(
           <div style={{marginTop:14}}>
             <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"0 0 8px"}}>✨ Tus temas</p>
-            <div style={{position:"relative"}}>
-              <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:6,paddingRight:24,WebkitOverflowScrolling:"touch"}}>
-                {personal.map(t=><span key={t.id} style={{flexShrink:0}}>{chip(t,"p")}</span>)}
-              </div>
-              <div style={{position:"absolute",top:0,right:0,bottom:6,width:26,background:`linear-gradient(90deg, transparent, ${C.card})`,pointerEvents:"none"}}/>
-            </div>
+            <ChipsWithSheet items={personal} onPick={t=>startStory(t)} limit={4} title="✨ Tus temas"/>
           </div>
         )}
         <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"14px 0 8px"}}>O elige una situación</p>
-        <div style={{position:"relative"}}>
-          <div style={{display:"grid",gridAutoFlow:"column",gridTemplateRows:"auto auto",gap:8,overflowX:"auto",paddingBottom:6,paddingRight:24,WebkitOverflowScrolling:"touch",justifyContent:"start"}}>
-            {topicSugs.map(t=>chip(t,"g"))}
-          </div>
-          <div style={{position:"absolute",top:0,right:0,bottom:6,width:26,background:`linear-gradient(90deg, transparent, ${C.card})`,pointerEvents:"none"}}/>
-        </div>
+        <ChipsWithSheet items={[...topicSugs,...LISTEN_TOPICS.filter(t=>!topicSugs.some(x=>x.id===t.id))]} onPick={t=>startStory(t)} limit={5} title="Elige una situación"/>
       </div>
     </div>
   );
@@ -2223,28 +2232,30 @@ function Listen({state,save,registerActivity}){
                   {genLoading?"✨ Actualizando…":"🔄 Tu perfil cambió — actualizar mis temas"}
                 </button>
               )}
-              <div style={{position:"relative"}}>
-                <div style={{display:"grid",gridAutoFlow:"column",gridTemplateRows:personal.topics.length>2?"auto auto":"auto",gap:8,overflowX:"auto",paddingBottom:6,paddingRight:24,WebkitOverflowScrolling:"touch",justifyContent:"start"}}>
+              {manageTopics?(
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
                   {personal.topics.map(t=>(
-                  <span key={t.id} style={{flexShrink:0,display:"inline-flex",alignItems:"center",borderRadius:999,border:`1.5px ${manageTopics?"dashed":"solid"} ${C.line}`,background:C.card}}>
-                    <button onClick={()=>!manageTopics&&newExercise(t)}
-                      style={{padding:manageTopics?"9px 4px 9px 14px":"9px 14px",border:"none",background:"transparent",color:C.ink,fontSize:13,fontWeight:600,whiteSpace:"nowrap"}}>{t.es}</button>
-                    {manageTopics&&<button onClick={()=>removePersonalTopic(t.id)} aria-label={`Eliminar tema ${t.es}`}
-                      style={{padding:"9px 12px 9px 4px",border:"none",background:"transparent",color:C.coral,fontSize:13,fontWeight:700}}>✕</button>}
-                  </span>
-                ))}
-                {!manageTopics&&!genLoading&&(
-                  <button onClick={()=>setAddingTopic(v=>!v)}
-                    style={{flexShrink:0,padding:"9px 14px",borderRadius:999,border:`1.5px dashed ${C.line}`,background:"transparent",color:C.inkSoft,fontSize:13,fontWeight:600,whiteSpace:"nowrap"}}>＋ Agregar</button>
-                )}
-                {manageTopics&&!genLoading&&(
-                  <button onClick={generatePersonalTopics}
-                    style={{flexShrink:0,padding:"9px 14px",borderRadius:999,border:`1.5px dashed ${C.blue}`,background:"transparent",color:C.blue,fontSize:13,fontWeight:600,whiteSpace:"nowrap"}}>↻ Regenerar todos</button>
-                )}
-                {genLoading&&<span style={{flexShrink:0,alignSelf:"center",fontSize:13,color:C.inkSoft,whiteSpace:"nowrap"}}>✨ Generando…</span>}
+                    <span key={t.id} style={{display:"inline-flex",alignItems:"center",borderRadius:999,border:`1.5px dashed ${C.line}`,background:C.card}}>
+                      <span style={{padding:"9px 4px 9px 14px",color:C.ink,fontSize:13,fontWeight:600}}>{t.es}</span>
+                      <button onClick={()=>removePersonalTopic(t.id)} aria-label={`Eliminar tema ${t.es}`}
+                        style={{padding:"9px 12px 9px 4px",border:"none",background:"transparent",color:C.coral,fontSize:13,fontWeight:700}}>✕</button>
+                    </span>
+                  ))}
+                  {!genLoading&&(
+                    <button onClick={generatePersonalTopics}
+                      style={{padding:"9px 14px",borderRadius:999,border:`1.5px dashed ${C.blue}`,background:"transparent",color:C.blue,fontSize:13,fontWeight:600}}>↻ Regenerar todos</button>
+                  )}
+                  {genLoading&&<span style={{alignSelf:"center",fontSize:13,color:C.inkSoft}}>✨ Generando…</span>}
                 </div>
-                <div style={{position:"absolute",top:0,right:0,bottom:6,width:26,background:`linear-gradient(90deg, transparent, ${C.card})`,pointerEvents:"none"}}/>
-              </div>
+              ):(
+                <div>
+                  <ChipsWithSheet items={personal.topics} onPick={t=>newExercise(t)} limit={4} title="✨ Tus temas"/>
+                  {!genLoading&&(
+                    <button onClick={()=>setAddingTopic(v=>!v)}
+                      style={{marginTop:8,padding:"8px 13px",borderRadius:999,border:`1.5px dashed ${C.line}`,background:"transparent",color:C.inkSoft,fontSize:12.5,fontWeight:600}}>＋ Agregar tema propio</button>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {addingTopic&&(
@@ -2258,17 +2269,7 @@ function Listen({state,save,registerActivity}){
           )}
 
           <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"14px 0 8px"}}>O elige una situación</p>
-          <div style={{position:"relative"}}>
-            <div style={{display:"grid",gridAutoFlow:"column",gridTemplateRows:"auto auto",gap:8,overflowX:"auto",paddingBottom:6,paddingRight:24,WebkitOverflowScrolling:"touch",justifyContent:"start"}}>
-              {topicSugs.map(t=>(
-                <button key={t.id} onClick={()=>newExercise(t)}
-                  style={{padding:"9px 14px",borderRadius:999,border:`1.5px solid ${C.line}`,background:C.card,color:C.ink,fontSize:13,fontWeight:600,whiteSpace:"nowrap",justifySelf:"start"}}>
-                  {t.es}
-                </button>
-              ))}
-            </div>
-            <div style={{position:"absolute",top:0,right:0,bottom:6,width:26,background:`linear-gradient(90deg, transparent, ${C.card})`,pointerEvents:"none"}}/>
-          </div>
+          <ChipsWithSheet items={[...topicSugs,...LISTEN_TOPICS.filter(t=>!topicSugs.some(x=>x.id===t.id))]} onPick={t=>newExercise(t)} limit={5} title="Elige una situación"/>
         </div>
       )}
       {loading&&<p style={{color:C.inkSoft}}>Preparando ejercicio…</p>}
