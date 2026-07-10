@@ -970,9 +970,30 @@ function MixedReview({state,save,onClose}){
   const [flipped,setFlipped]=useState(false);
   const [counts,setCounts]=useState({good:0,again:0});
   const [silent,setSilent]=useState(isSilent());
-  const toggleSilent=()=>{const v=!silent;setSilent(v);saveSilent(v);};
   const {speak,stop}=useSpeech();
   const card=queue[idx];
+  // ── Ejercicios sin audio (modo silencio): selección múltiple y ordenar palabras ──
+  const [answered,setAnswered]=useState(null); // {correct:boolean}
+  const [built,setBuilt]=useState([]);         // índices de palabras elegidas (ordenar)
+  const toggleSilent=()=>{const v=!silent;setSilent(v);saveSilent(v);setAnswered(null);setBuilt([]);};
+  const normAns=(t)=>(t||"").toLowerCase().replace(/[^a-z0-9' ]+/g," ").replace(/\s+/g," ").trim();
+  const words=card?card.back.replace(/[.!?]+$/,"").split(" ").filter(Boolean):[];
+  const useOrder=silent&&card&&card.type==="phrase"&&words.length>=3&&words.length<=10&&idx%2===1;
+  const choiceOptions=React.useMemo(()=>{
+    if(!card) return [];
+    const pool=[...new Set([...queue.map(q=>q.back),...state.deck.map(c=>c.en)])].filter(x=>x&&normAns(x)!==normAns(card.back));
+    const distract=pool.sort(()=>Math.random()-0.5).slice(0,2);
+    return [...distract,card.back].sort(()=>Math.random()-0.5);
+  },[idx]);
+  const answerChoice=(opt)=>{ if(answered) return; setAnswered({correct:normAns(opt)===normAns(card.back),picked:opt}); };
+  const tapWord=(i)=>{
+    if(answered||built.includes(i)) return;
+    const nb=[...built,i]; setBuilt(nb);
+    if(nb.length===words.length){
+      const guess=nb.map(x=>words[x]).join(" ");
+      setAnswered({correct:normAns(guess)===normAns(card.back)});
+    }
+  };
   const grade=(g)=>{
     if(!card)return;
     if(card.type==="phrase"){
@@ -986,7 +1007,7 @@ function MixedReview({state,save,onClose}){
       s[card.id]={...srsNext(prev,g),seen:(prev.seen||0)+1};vocabSaveSrs(s);
     }
     setCounts(c=>({...c,[g==="again"?"again":"good"]:c[g==="again"?"again":"good"]+1}));
-    setFlipped(false);setIdx(i=>i+1);
+    setFlipped(false);setAnswered(null);setBuilt([]);setIdx(i=>i+1);
   };
   return(
     <div style={{position:"fixed",inset:0,zIndex:200,background:C.paper,padding:"18px 16px",overflowY:"auto"}}>
@@ -1007,25 +1028,69 @@ function MixedReview({state,save,onClose}){
         {card?(
           <div className="fadein" style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:18,padding:24,minHeight:220,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
             <div style={{textAlign:"center"}}>
-              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5}}>{card.icon} {card.type==="phrase"?"Frase":card.type==="verb"?"Verbo":"Palabra"} · {idx+1}/{queue.length}</p>
+              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5}}>{card.icon} {card.type==="phrase"?"Frase":card.type==="verb"?"Verbo":"Palabra"} · {idx+1}/{queue.length}{silent&&<span> · 🔇</span>}</p>
               <p style={{fontSize:24,fontWeight:700,margin:"16px 0 6px",color:C.ink}}>{card.front}</p>
-              {flipped&&(
+              {!silent&&flipped&&(
                 <p className="fadein" style={{fontSize:26,fontFamily:"'Newsreader',Georgia,serif",margin:"6px 0"}}>
                   <span className="hl">{card.back}</span>
                   <button onClick={()=>speak(card.back)} aria-label="Escuchar" style={{border:"none",background:"transparent",fontSize:20,marginLeft:8}}>🔊</button>
                 </p>
               )}
-              {flipped&&card.note&&<p style={{fontSize:13,color:C.inkSoft,margin:"6px 0 0"}}>{card.note}</p>}
+              {!silent&&flipped&&card.note&&<p style={{fontSize:13,color:C.inkSoft,margin:"6px 0 0"}}>{card.note}</p>}
             </div>
-            {!flipped?(
-              <BigButton onClick={()=>{setFlipped(true);if(!silent)speak(card.back);}}>Mostrar en inglés</BigButton>
+
+            {/* ── MODO SILENCIO: ejercicios autocorregidos ── */}
+            {silent&&!answered&&useOrder&&(
+              <div className="fadein">
+                <p style={{fontSize:13,color:C.inkSoft,textAlign:"center",margin:"0 0 10px"}}>Toca las palabras en orden para armar la frase en inglés:</p>
+                <div style={{minHeight:44,background:C.paper,borderRadius:12,padding:"10px 12px",marginBottom:10,fontFamily:FEN,fontSize:16,textAlign:"center"}}>
+                  {built.length?built.map(x=>words[x]).join(" "):<span style={{color:C.inkSoft,fontSize:13}}>…</span>}
+                  {built.length>0&&<button onClick={()=>setBuilt(b=>b.slice(0,-1))} aria-label="Borrar última" style={{border:"none",background:"transparent",fontSize:15,marginLeft:8,color:C.coral}}>↩</button>}
+                </div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8,justifyContent:"center"}}>
+                  {words.map((w,i)=>(
+                    <button key={i} onClick={()=>tapWord(i)} disabled={built.includes(i)}
+                      style={{padding:"9px 14px",borderRadius:999,border:`1.5px solid ${C.line}`,background:built.includes(i)?C.paper:C.card,color:built.includes(i)?C.inkSoft:C.ink,fontSize:14,fontWeight:600,opacity:built.includes(i)?0.45:1,fontFamily:FEN}}>
+                      {w}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {silent&&!answered&&!useOrder&&(
+              <div className="fadein">
+                <p style={{fontSize:13,color:C.inkSoft,textAlign:"center",margin:"0 0 10px"}}>¿Cuál es la traducción correcta?</p>
+                <div style={{display:"grid",gap:8}}>
+                  {choiceOptions.map((opt,i)=>(
+                    <button key={i} onClick={()=>answerChoice(opt)}
+                      style={{padding:"13px 14px",borderRadius:14,border:`1.5px solid ${C.line}`,background:C.card,color:C.ink,fontSize:15,fontWeight:600,textAlign:"left",fontFamily:FEN}}>
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {silent&&answered&&(
+              <div className="fadein">
+                <p style={{textAlign:"center",fontWeight:800,fontSize:16,color:answered.correct?C.green:C.coral,margin:"0 0 8px"}}>
+                  {answered.correct?"✓ ¡Correcto!":"✗ Casi…"}
+                </p>
+                <p style={{textAlign:"center",fontSize:19,fontFamily:FEN,margin:"0 0 4px"}}><span className="hl">{card.back}</span></p>
+                {card.note&&<p style={{fontSize:13,color:C.inkSoft,textAlign:"center",margin:"0 0 8px"}}>{card.note}</p>}
+                <BigButton onClick={()=>grade(answered.correct?"good":"again")}>Continuar →</BigButton>
+              </div>
+            )}
+
+            {/* ── MODO NORMAL: flashcard con audio ── */}
+            {!silent&&(!flipped?(
+              <BigButton onClick={()=>{setFlipped(true);speak(card.back);}}>Mostrar en inglés</BigButton>
             ):(
               <div style={{display:"flex",gap:8,marginTop:16}}>
                 <GradeBtn color={C.coral} bg={C.coralSoft} onClick={()=>grade("again")} label="Otra vez" sub="en 10 min"/>
                 <GradeBtn color={C.blue} bg={C.blueSoft} onClick={()=>grade("good")} label="Bien" sub="días"/>
                 <GradeBtn color={C.green} bg={C.greenSoft} onClick={()=>grade("easy")} label="Fácil" sub="más días"/>
               </div>
-            )}
+            ))}
           </div>
         ):(
           <div className="fadein" style={{background:C.greenSoft,border:`1px solid ${C.green}`,borderRadius:18,padding:28,textAlign:"center"}}>
