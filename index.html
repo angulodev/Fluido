@@ -406,6 +406,9 @@ function rankVoice(v){
   if(v.localService===false) s+=5;
   return s;
 }
+// 🔇 Modo silencio global — para repasar sin que la app hable sola (metro, oficina, gente cerca)
+function isSilent(){try{return localStorage.getItem("fluido-silent")==="1";}catch(e){return false;}}
+function saveSilent(v){try{localStorage.setItem("fluido-silent",v?"1":"0");}catch(e){}}
 function useSpeech(){
   const [voices,setVoices]=useState([]);
   const supported=typeof window!=="undefined"&&"speechSynthesis" in window;
@@ -966,7 +969,9 @@ function MixedReview({state,save,onClose}){
   const [idx,setIdx]=useState(0);
   const [flipped,setFlipped]=useState(false);
   const [counts,setCounts]=useState({good:0,again:0});
-  const {speak}=useSpeech();
+  const [silent,setSilent]=useState(isSilent());
+  const toggleSilent=()=>{const v=!silent;setSilent(v);saveSilent(v);};
+  const {speak,stop}=useSpeech();
   const card=queue[idx];
   const grade=(g)=>{
     if(!card)return;
@@ -984,11 +989,17 @@ function MixedReview({state,save,onClose}){
     setFlipped(false);setIdx(i=>i+1);
   };
   return(
-    <div style={{position:"fixed",inset:0,zIndex:200,background:C.bg,padding:"18px 16px",overflowY:"auto"}}>
+    <div style={{position:"fixed",inset:0,zIndex:200,background:C.paper,padding:"18px 16px",overflowY:"auto"}}>
       <div style={{maxWidth:560,margin:"0 auto"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <span style={{fontWeight:800,fontSize:18}}>⚡ Repaso del día</span>
-          <button onClick={onClose} style={{border:"none",background:"transparent",color:C.inkSoft,fontSize:22,padding:4}} aria-label="Cerrar">✕</button>
+          <div style={{display:"flex",alignItems:"center",gap:4}}>
+            <button onClick={()=>{toggleSilent();if(!silent)stop();}} aria-label={silent?"Activar audio":"Modo silencio: repasa sin audio automático"}
+              style={{border:`1.5px solid ${silent?C.coral:C.line}`,background:silent?C.coralSoft:"transparent",color:silent?C.coral:C.inkSoft,fontSize:13,fontWeight:700,padding:"6px 11px",borderRadius:999}}>
+              {silent?"🔇 Silencio":"🔊"}
+            </button>
+            <button onClick={onClose} style={{border:"none",background:"transparent",color:C.inkSoft,fontSize:22,padding:4}} aria-label="Cerrar">✕</button>
+          </div>
         </div>
         <div style={{height:6,background:C.card,borderRadius:999,marginBottom:16,overflow:"hidden"}}>
           <div style={{height:"100%",width:`${queue.length?Math.round(idx/queue.length*100):100}%`,background:C.green,borderRadius:999,transition:"width .3s"}}/>
@@ -1007,7 +1018,7 @@ function MixedReview({state,save,onClose}){
               {flipped&&card.note&&<p style={{fontSize:13,color:C.inkSoft,margin:"6px 0 0"}}>{card.note}</p>}
             </div>
             {!flipped?(
-              <BigButton onClick={()=>{setFlipped(true);speak(card.back);}}>Mostrar en inglés</BigButton>
+              <BigButton onClick={()=>{setFlipped(true);if(!silent)speak(card.back);}}>Mostrar en inglés</BigButton>
             ):(
               <div style={{display:"flex",gap:8,marginTop:16}}>
                 <GradeBtn color={C.coral} bg={C.coralSoft} onClick={()=>grade("again")} label="Otra vez" sub="en 10 min"/>
@@ -1454,7 +1465,7 @@ function Phrases({state,save,registerActivity,initialMode}){
               </div>
             )}
           </div>
-          {!flipped?<BigButton onClick={()=>{setFlipped(true);speak(card.en);}}>Mostrar respuesta</BigButton>:(
+          {!flipped?<BigButton onClick={()=>{setFlipped(true);if(!isSilent())speak(card.en);}}>Mostrar respuesta</BigButton>:(
             <div style={{display:"flex",gap:8,marginTop:16}}>
               <GradeBtn color={C.coral} bg={C.coralSoft} onClick={()=>grade("again")} label="Otra vez" sub="en 10 min"/>
               <GradeBtn color={C.blue} bg={C.blueSoft} onClick={()=>grade("good")} label="Bien" sub={srsPreview(card,"good")}/>
@@ -3037,7 +3048,7 @@ function Verbs({registerActivity,state}){
           )}
         </div>
         {!flipped?(
-          <BigButton onClick={()=>{setFlipped(true);speak(parts[0]);}}>Mostrar conjugación</BigButton>
+          <BigButton onClick={()=>{setFlipped(true);if(!isSilent())speak(parts[0]);}}>Mostrar conjugación</BigButton>
         ):withGrades?(
           <div style={{display:"flex",gap:8,marginTop:16}}>
             <GradeBtn color={C.coral} bg={C.coralSoft} onClick={()=>grade("again")} label="Otra vez" sub="en 10 min"/>
@@ -3235,7 +3246,7 @@ function Vocabulary({registerActivity,state}){
               )}
             </div>
             {!flipped?(
-              <BigButton onClick={()=>{setFlipped(true);speak(current.en);}}>Mostrar en inglés</BigButton>
+              <BigButton onClick={()=>{setFlipped(true);if(!isSilent())speak(current.en);}}>Mostrar en inglés</BigButton>
             ):(
               <>
               <div style={{display:"flex",gap:8,marginTop:16}}>
