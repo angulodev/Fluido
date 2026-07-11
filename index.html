@@ -986,13 +986,18 @@ function MixedReview({state,save,onClose}){
     return [...distract,card.back].sort(()=>Math.random()-0.5);
   },[idx]);
   const answerChoice=(opt)=>{ if(answered) return; setAnswered({correct:normAns(opt)===normAns(card.back),picked:opt}); };
-  const tapWord=(i)=>{
-    if(answered||built.includes(i)) return;
-    const nb=[...built,i]; setBuilt(nb);
-    if(nb.length===words.length){
-      const guess=nb.map(x=>words[x]).join(" ");
-      setAnswered({correct:normAns(guess)===normAns(card.back)});
-    }
+  // Orden barajado real de los chips (evitando que quede igual al original)
+  const shuffleOrder=useMemo(()=>{
+    const idxs=words.map((_,i)=>i);
+    for(let i=idxs.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[idxs[i],idxs[j]]=[idxs[j],idxs[i]];}
+    if(idxs.length>2&&idxs.every((v,i)=>v===i)){[idxs[0],idxs[1]]=[idxs[1],idxs[0]];}
+    return idxs;
+  },[idx]);
+  const tapWord=(i)=>{ if(answered||built.includes(i)) return; setBuilt(b=>[...b,i]); };
+  const removeBuilt=(pos)=>{ if(answered) return; setBuilt(b=>b.filter((_,p)=>p!==pos)); };
+  const checkOrder=()=>{
+    const guess=built.map(x=>words[x]).join(" ");
+    setAnswered({correct:normAns(guess)===normAns(card.back),picked:guess});
   };
   const grade=(g)=>{
     if(!card)return;
@@ -1042,19 +1047,28 @@ function MixedReview({state,save,onClose}){
             {/* ── MODO SILENCIO: ejercicios autocorregidos ── */}
             {silent&&!answered&&useOrder&&(
               <div className="fadein">
-                <p style={{fontSize:13,color:C.inkSoft,textAlign:"center",margin:"0 0 10px"}}>Toca las palabras en orden para armar la frase en inglés:</p>
-                <div style={{minHeight:44,background:C.paper,borderRadius:12,padding:"10px 12px",marginBottom:10,fontFamily:FEN,fontSize:16,textAlign:"center"}}>
-                  {built.length?built.map(x=>words[x]).join(" "):<span style={{color:C.inkSoft,fontSize:13}}>…</span>}
-                  {built.length>0&&<button onClick={()=>setBuilt(b=>b.slice(0,-1))} aria-label="Borrar última" style={{border:"none",background:"transparent",fontSize:15,marginLeft:8,color:C.coral}}>↩</button>}
+                <p style={{fontSize:13,color:C.inkSoft,textAlign:"center",margin:"0 0 10px"}}>Toca las palabras para armar la frase — toca una en la frase para quitarla:</p>
+                <div style={{minHeight:44,background:C.paper,borderRadius:12,padding:"8px 10px",marginBottom:10,textAlign:"center",display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center",alignItems:"center"}}>
+                  {built.length?built.map((x,p)=>(
+                    <button key={p} onClick={()=>removeBuilt(p)} aria-label={`Quitar ${words[x]}`}
+                      style={{border:`1px dashed ${C.line}`,background:C.card,borderRadius:8,padding:"4px 8px",fontFamily:FEN,fontSize:16,color:C.ink}}>
+                      {words[x]}
+                    </button>
+                  )):<span style={{color:C.inkSoft,fontSize:13}}>…</span>}
                 </div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:8,justifyContent:"center"}}>
-                  {words.map((w,i)=>(
+                  {shuffleOrder.map(i=>(
                     <button key={i} onClick={()=>tapWord(i)} disabled={built.includes(i)}
-                      style={{padding:"9px 14px",borderRadius:999,border:`1.5px solid ${C.line}`,background:built.includes(i)?C.paper:C.card,color:built.includes(i)?C.inkSoft:C.ink,fontSize:14,fontWeight:600,opacity:built.includes(i)?0.45:1,fontFamily:FEN}}>
-                      {w}
+                      style={{padding:"9px 14px",borderRadius:999,border:`1.5px solid ${C.line}`,background:built.includes(i)?C.paper:C.card,color:built.includes(i)?C.inkSoft:C.ink,fontSize:14,fontWeight:600,opacity:built.includes(i)?0.35:1,fontFamily:FEN}}>
+                      {words[i]}
                     </button>
                   ))}
                 </div>
+                {built.length===words.length&&(
+                  <div className="fadein" style={{marginTop:12}}>
+                    <BigButton onClick={checkOrder}>Comprobar</BigButton>
+                  </div>
+                )}
               </div>
             )}
             {silent&&!answered&&!useOrder&&(
@@ -1075,6 +1089,9 @@ function MixedReview({state,save,onClose}){
                 <p style={{textAlign:"center",fontWeight:800,fontSize:16,color:answered.correct?C.green:C.coral,margin:"0 0 8px"}}>
                   {answered.correct?"✓ ¡Correcto!":"✗ Casi…"}
                 </p>
+                {!answered.correct&&answered.picked&&(
+                  <p style={{textAlign:"center",fontSize:15,fontFamily:FEN,color:C.coral,textDecoration:"line-through",margin:"0 0 6px",opacity:0.85}}>{answered.picked}</p>
+                )}
                 <p style={{textAlign:"center",fontSize:19,fontFamily:FEN,margin:"0 0 4px"}}><span className="hl">{card.back}</span></p>
                 {card.note&&<p style={{fontSize:13,color:C.inkSoft,textAlign:"center",margin:"0 0 8px"}}>{card.note}</p>}
                 <BigButton onClick={()=>grade(answered.correct?"good":"again")}>Continuar →</BigButton>
@@ -3094,7 +3111,8 @@ function Verbs({registerActivity,state}){
             </span>
             {srsData&&srsData.seen>0&&<span style={{fontSize:10,color:C.inkSoft}}>visto {srsData.seen}×</span>}
           </div>
-          <p style={{fontSize:20,fontWeight:700,color:C.ink,margin:"8px 0 2px"}}>{tr}</p>
+          <p style={{fontSize:26,fontWeight:700,fontFamily:FEN,color:C.ink,margin:"8px 0 0"}}>{parts[0]}</p>
+          <p style={{fontSize:15,color:C.inkSoft,margin:"2px 0 2px"}}>{tr}</p>
           {!flipped?(
             <p style={{fontSize:13,color:C.inkSoft,margin:"4px 0"}}>¿Recuerdas su conjugación? Dila en voz alta antes de voltear.</p>
           ):(
@@ -3222,6 +3240,7 @@ function Vocabulary({registerActivity,state}){
     }
     if(!pool.length){setCurrent(null);setFlipped(false);return;}
     setCurrent(pool[Math.floor(Math.random()*pool.length)]);setFlipped(false);
+    setExamples(null);setExErr(null);setRevealedEx({});
   };
 
   const grade=(g)=>{
@@ -3244,14 +3263,15 @@ function Vocabulary({registerActivity,state}){
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(165px,1fr))",gap:8}}>
         {BANK_WORDS.map(b=>{
           const st=statsOf(b);
-          const done=st.due===0;
+          const started=b.words.length-st.fresh;
+          const done=started>0&&st.due===0;
           return(
             <button key={b.n} onClick={()=>{setBlock(b);setShowList(false);pick(b,false);}}
               style={{padding:"12px 10px",borderRadius:12,border:`1.5px solid ${done?C.green:C.line}`,background:C.card,textAlign:"left"}}>
               <div style={{fontSize:22}}>{b.icon}</div>
               <div style={{fontWeight:600,fontSize:13,marginTop:4,color:C.ink}}>{b.name}</div>
               <div style={{fontSize:11,color:done?C.green:C.inkSoft,fontWeight:done?700:400}}>
-                {done?"✓ Al día":`⏰ ${st.due} por repasar`}{st.fresh>0&&<span style={{color:C.inkSoft,fontWeight:400}}> · ✨ {st.fresh} nuevas</span>}
+                {started===0?`🌱 ${b.words.length} palabras por descubrir`:done?"✓ Al día":`⏰ ${st.due} por repasar`}{started>0&&st.fresh>0&&<span style={{color:C.inkSoft,fontWeight:400}}> · ✨ {st.fresh} nuevas</span>}
               </div>
             </button>);
         })}
@@ -3319,6 +3339,7 @@ function Vocabulary({registerActivity,state}){
                 <GradeBtn color={C.blue} bg={C.blueSoft} onClick={()=>grade("good")} label="Bien" sub="días"/>
                 <GradeBtn color={C.green} bg={C.greenSoft} onClick={()=>grade("easy")} label="Fácil" sub="más días"/>
               </div>
+              <PronounceCheck target={current.en}/>
               <button onClick={()=>{setExamples(null);setExErr(null);genExamples(current);}}
                 disabled={loadingEx}
                 style={{marginTop:12,width:"100%",padding:"10px 0",borderRadius:12,border:`1.5px solid ${C.blue}`,background:"transparent",color:C.blue,fontWeight:600,fontSize:14,opacity:loadingEx?0.6:1}}>
