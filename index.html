@@ -1090,7 +1090,15 @@ function MixedReview({state,save,onClose}){
                   {answered.correct?"✓ ¡Correcto!":"✗ Casi…"}
                 </p>
                 {!answered.correct&&answered.picked&&(
-                  <p style={{textAlign:"center",fontSize:15,fontFamily:FEN,color:C.coral,textDecoration:"line-through",margin:"0 0 6px",opacity:0.85}}>{answered.picked}</p>
+                  <p style={{textAlign:"center",fontSize:15,fontFamily:FEN,margin:"0 0 6px"}}>
+                    {(()=>{
+                      const cw=normAns(card.back).split(" ");
+                      return answered.picked.split(" ").filter(Boolean).map((w,i)=>{
+                        const okPos=normAns(w)===cw[i];
+                        return <span key={i} style={{color:okPos?C.green:C.coral,textDecoration:okPos?"none":"line-through",fontWeight:okPos?700:400,opacity:okPos?1:0.8,marginRight:5}}>{w}</span>;
+                      });
+                    })()}
+                  </p>
                 )}
                 <p style={{textAlign:"center",fontSize:19,fontFamily:FEN,margin:"0 0 4px"}}><span className="hl">{card.back}</span></p>
                 {card.note&&<p style={{fontSize:13,color:C.inkSoft,textAlign:"center",margin:"0 0 8px"}}>{card.note}</p>}
