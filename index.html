@@ -949,7 +949,7 @@ function StatCard({big,label,accent}){return(<div className="elev-sm" style={{fl
 
 // ⚡ Sesión de repaso mixta: frases + verbos + vocab vencidos en un solo flujo
 function MixedReview({state,save,onClose}){
-  const [queue]=useState(()=>{
+  const buildQueue=()=>{
     const now=Date.now();const items=[];
     state.deck.filter(c=>c.due<=now).sort(()=>Math.random()-0.5).slice(0,10)
       .forEach(c=>items.push({type:"phrase",icon:"📚",front:c.es,back:c.en,note:c.note,id:c.id}));
@@ -965,7 +965,9 @@ function MixedReview({state,save,onClose}){
         .forEach(w=>items.push({type:"vocab",icon:"🔠",front:w.es,back:w.en,id:w.en.toLowerCase()}));
     }catch(e){}
     return items.sort(()=>Math.random()-0.5).slice(0,20);
-  });
+  };
+  const [queue,setQueue]=useState(buildQueue);
+  const [noMore,setNoMore]=useState(false);
   const [idx,setIdx]=useState(0);
   const [flipped,setFlipped]=useState(false);
   const [counts,setCounts]=useState({good:0,again:0});
@@ -976,15 +978,34 @@ function MixedReview({state,save,onClose}){
   const [answered,setAnswered]=useState(null); // {correct:boolean}
   const [built,setBuilt]=useState([]);         // índices de palabras elegidas (ordenar)
   const toggleSilent=()=>{const v=!silent;setSilent(v);saveSilent(v);setAnswered(null);setBuilt([]);};
+  const anotherRound=()=>{
+    const q=buildQueue();
+    if(!q.length){setNoMore(true);return;}
+    setQueue(q);setIdx(0);setCounts({good:0,again:0});setAnswered(null);setBuilt([]);setFlipped(false);setNoMore(false);
+  };
   const normAns=(t)=>(t||"").toLowerCase().replace(/[^a-z0-9' ]+/g," ").replace(/\s+/g," ").trim();
   const words=card?card.back.replace(/[.!?]+$/,"").split(" ").filter(Boolean):[];
   const useOrder=silent&&card&&card.type==="phrase"&&words.length>=3&&words.length<=10&&idx%2===1;
   const choiceOptions=React.useMemo(()=>{
     if(!card) return [];
-    const pool=[...new Set([...queue.map(q=>q.back),...state.deck.map(c=>c.en)])].filter(x=>x&&normAns(x)!==normAns(card.back));
-    const distract=pool.sort(()=>Math.random()-0.5).slice(0,2);
+    const target=normAns(card.back);
+    const tlen=words.length;
+    // Distractores de la MISMA especie: palabra↔palabras, verbo↔verbos, frase↔frases
+    let cands=[];
+    if(card.type==="vocab"){
+      cands=BANK_WORDS.flatMap(b=>b.words.map(w=>w.en));
+    } else if(card.type==="verb"){
+      try{cands=(loadBank().verbs||[]).map(v=>v.en);}catch(e){}
+    } else {
+      cands=[...queue.filter(q=>q.type==="phrase").map(q=>q.back),...state.deck.map(c=>c.en)];
+    }
+    let pool=[...new Set(cands)].filter(x=>x&&normAns(x)!==target);
+    // …y de largo similar en palabras, para que la forma no delate la respuesta
+    const similar=pool.filter(x=>Math.abs(x.split(" ").length-tlen)<=Math.max(1,Math.round(tlen*0.4)));
+    const src=similar.length>=2?similar:pool;
+    const distract=[...src].sort(()=>Math.random()-0.5).slice(0,2);
     return [...distract,card.back].sort(()=>Math.random()-0.5);
-  },[idx]);
+  },[idx,queue]);
   const answerChoice=(opt)=>{ if(answered) return; setAnswered({correct:normAns(opt)===normAns(card.back),picked:opt}); };
   // Orden barajado real de los chips (evitando que quede igual al original)
   const shuffleOrder=useMemo(()=>{
@@ -1122,7 +1143,14 @@ function MixedReview({state,save,onClose}){
             <p style={{fontSize:40,margin:"0 0 8px"}}>🎉</p>
             <p style={{fontWeight:700,fontSize:18,color:C.green,marginBottom:6}}>¡Repaso completado!</p>
             <p style={{fontSize:14,color:C.inkSoft,marginBottom:16}}>{counts.good} bien · {counts.again} para reintentar. Tu memoria de largo plazo te lo agradece.</p>
-            <BigButton onClick={onClose}>Volver al inicio</BigButton>
+            {noMore?(
+              <p className="fadein" style={{fontSize:14,fontWeight:700,color:C.green,marginBottom:12}}>No queda nada más vencido por hoy — ¡todo al día! 🙌</p>
+            ):(
+              <div style={{marginBottom:10}}>
+                <BigButton onClick={anotherRound}>🔁 Practicar 20 más</BigButton>
+              </div>
+            )}
+            <button onClick={onClose} style={{width:"100%",padding:"13px 18px",borderRadius:16,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:700,fontSize:15}}>Volver al inicio</button>
           </div>
         )}
       </div>
