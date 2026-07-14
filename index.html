@@ -1068,7 +1068,11 @@ function MixedReview({state,save,onClose}){
             {/* ── MODO SILENCIO: ejercicios autocorregidos ── */}
             {silent&&!answered&&useOrder&&(
               <div className="fadein">
-                <p style={{fontSize:13,color:C.inkSoft,textAlign:"center",margin:"0 0 10px"}}>Toca las palabras para armar la frase — toca una en la frase para quitarla:</p>
+                <p style={{fontSize:13,color:C.inkSoft,textAlign:"center",margin:"0 0 8px"}}>Toca las palabras para armar la frase — toca una en la frase para quitarla:</p>
+                <div style={{textAlign:"center",margin:"0 0 12px"}}>
+                  <button onClick={()=>speak(card.back)}
+                    style={{padding:"7px 13px",borderRadius:999,border:`1.5px solid ${C.line}`,background:C.card,color:C.inkSoft,fontSize:12.5,fontWeight:700}}>🔊 Escuchar la frase</button>
+                </div>
                 <div style={{minHeight:44,background:C.paper,borderRadius:12,padding:"8px 10px",marginBottom:10,textAlign:"center",display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center",alignItems:"center"}}>
                   {built.length?built.map((x,p)=>(
                     <button key={p} onClick={()=>removeBuilt(p)} aria-label={`Quitar ${words[x]}`}
@@ -1090,11 +1094,19 @@ function MixedReview({state,save,onClose}){
                     <BigButton onClick={checkOrder}>Comprobar</BigButton>
                   </div>
                 )}
+                <p style={{textAlign:"center",margin:"12px 0 0"}}>
+                  <button onClick={()=>setAnswered({correct:false,skipped:true})}
+                    style={{border:"none",background:"transparent",color:C.inkSoft,fontSize:12.5,fontWeight:600,textDecoration:"underline dotted"}}>🤷 No lo sé — mostrar respuesta</button>
+                </p>
               </div>
             )}
             {silent&&!answered&&!useOrder&&(
               <div className="fadein">
-                <p style={{fontSize:13,color:C.inkSoft,textAlign:"center",margin:"0 0 10px"}}>¿Cuál es la traducción correcta?</p>
+                <p style={{fontSize:13,color:C.inkSoft,textAlign:"center",margin:"0 0 8px"}}>¿Cuál es la traducción correcta?</p>
+                <div style={{textAlign:"center",margin:"0 0 12px"}}>
+                  <button onClick={()=>speak(card.back)}
+                    style={{padding:"7px 13px",borderRadius:999,border:`1.5px solid ${C.line}`,background:C.card,color:C.inkSoft,fontSize:12.5,fontWeight:700}}>🔊 Escuchar la frase</button>
+                </div>
                 <div style={{display:"grid",gap:8}}>
                   {choiceOptions.map((opt,i)=>(
                     <button key={i} onClick={()=>answerChoice(opt)}
@@ -1103,12 +1115,16 @@ function MixedReview({state,save,onClose}){
                     </button>
                   ))}
                 </div>
+                <p style={{textAlign:"center",margin:"12px 0 0"}}>
+                  <button onClick={()=>setAnswered({correct:false,skipped:true})}
+                    style={{border:"none",background:"transparent",color:C.inkSoft,fontSize:12.5,fontWeight:600,textDecoration:"underline dotted"}}>🤷 No lo sé — mostrar respuesta</button>
+                </p>
               </div>
             )}
             {silent&&answered&&(
               <div className="fadein">
-                <p style={{textAlign:"center",fontWeight:800,fontSize:16,color:answered.correct?C.green:C.coral,margin:"0 0 8px"}}>
-                  {answered.correct?"✓ ¡Correcto!":"✗ Casi…"}
+                <p style={{textAlign:"center",fontWeight:800,fontSize:16,color:answered.correct?C.green:answered.skipped?C.blue:C.coral,margin:"0 0 8px"}}>
+                  {answered.correct?"✓ ¡Correcto!":answered.skipped?"👀 Apréndela para la próxima:":"✗ Casi…"}
                 </p>
                 {!answered.correct&&answered.picked&&(
                   <p style={{textAlign:"center",fontSize:15,fontFamily:FEN,margin:"0 0 6px"}}>
@@ -1121,7 +1137,9 @@ function MixedReview({state,save,onClose}){
                     })()}
                   </p>
                 )}
-                <p style={{textAlign:"center",fontSize:19,fontFamily:FEN,margin:"0 0 4px"}}><span className="hl">{card.back}</span></p>
+                <p style={{textAlign:"center",fontSize:19,fontFamily:FEN,margin:"0 0 4px"}}><span className="hl">{card.back}</span>
+                  <button onClick={()=>speak(card.back)} aria-label="Escuchar" style={{border:"none",background:"transparent",fontSize:18,marginLeft:8}}>🔊</button>
+                </p>
                 {card.note&&<p style={{fontSize:13,color:C.inkSoft,textAlign:"center",margin:"0 0 8px"}}>{card.note}</p>}
                 <BigButton onClick={()=>grade(answered.correct?"good":"again")}>Continuar →</BigButton>
               </div>
