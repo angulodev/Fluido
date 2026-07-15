@@ -1390,6 +1390,32 @@ function CheatSheet({title,items,level,withTips,onClose}){
   );
 }
 
+// ℹ️ Info de módulo: qué es, qué entrena y cómo se usa — expandida la primera vez, colapsable después
+function ModuleInfo({id,points}){
+  const KEY="fluido-info-"+id;
+  const [open,setOpen]=useState(()=>{try{return localStorage.getItem(KEY)!=="1";}catch(e){return true;}});
+  const dismiss=()=>{setOpen(false);try{localStorage.setItem(KEY,"1");}catch(e){}};
+  if(!open) return(
+    <button onClick={()=>setOpen(true)}
+      style={{margin:"0 0 12px",padding:0,border:"none",background:"transparent",color:C.inkSoft,fontSize:12.5,fontWeight:600,textDecoration:"underline dotted"}}>
+      ℹ️ ¿Cómo funciona este módulo?
+    </button>);
+  return(
+    <div className="elev-sm fadein" style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:"14px 16px",margin:"2px 0 16px"}}>
+      {points.map((p,i)=>(
+        <div key={i} style={{display:"flex",gap:11,alignItems:"flex-start",marginBottom:i<points.length-1?11:0}}>
+          <span style={{fontSize:18,flexShrink:0,lineHeight:1.3}}>{p[0]}</span>
+          <span style={{fontSize:13.5,lineHeight:1.55,color:C.ink}}>{p[1]}</span>
+        </div>
+      ))}
+      <button onClick={dismiss}
+        style={{marginTop:12,padding:"8px 14px",borderRadius:999,border:"none",background:C.blueSoft,color:C.blue,fontWeight:700,fontSize:13}}>
+        Entendido ✓
+      </button>
+    </div>
+  );
+}
+
 // Chips sin scroll horizontal: muestra pocos envueltos + hoja inferior con el catálogo completo
 function ChipsWithSheet({items,onPick,limit,title}){
   const [open,setOpen]=useState(false);
@@ -1548,6 +1574,11 @@ function Talk({state,registerActivity}){
       <h2 style={{fontSize:24,fontWeight:700,marginBottom:4}}>Conversar</h2>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:14,flexWrap:"wrap"}}>
         <p style={{fontSize:14,color:C.inkSoft,margin:0}}>{voiceMode?"Habla en inglés con el micrófono. Corrijo lo que diga tu voz.":"Escribe en inglés como puedas. Aquí "}{!voiceMode&&<span className="hl">equivocarse es el método</span>}{!voiceMode&&"."}</p>
+        <ModuleInfo id="talk" points={[
+          ["🎭",<>Es un <strong>simulador de situaciones reales</strong>: la IA actúa un personaje (entrevistador, cliente, mesero…) y tú le respondes como puedas, por texto o con el 🎤 Modo voz.</>],
+          ["🗣️",<>Entrena tu <strong>fluidez</strong>: mantener la conversación viva aunque cometas errores — igual que en la vida real, donde nadie te detiene a mitad de frase.</>],
+          ["🖍️",<>En cada mensaje recibes la corrección tipo "resaltador de profesor", pero la meta aquí es <strong>comunicarte, no ser perfecto</strong>. Para pulir gramática con calma, usa Escribir.</>]
+        ]}/>
         {micOk&&(
           <button onClick={()=>setVoiceMode(v=>!v)}
             style={{flexShrink:0,padding:"7px 14px",borderRadius:999,border:`1.5px solid ${voiceMode?C.coral:C.blue}`,background:voiceMode?C.coralSoft:C.blueSoft,color:voiceMode?C.coral:C.blue,fontWeight:700,fontSize:13}}>
@@ -1952,7 +1983,12 @@ function Write({state,registerActivity}){
   return(
     <div>
       <h2 style={{fontSize:26,fontWeight:800,marginBottom:4}}>Escribir</h2>
-      <p style={{fontSize:14,color:C.inkSoft,marginBottom:16}}>Escribe tú en inglés y recibe corrección al instante.</p>
+      <p style={{fontSize:14,color:C.inkSoft,marginBottom:12}}>Escribe tú en inglés y recibe corrección al instante.</p>
+      <ModuleInfo id="write" points={[
+        ["✍️",<>Es tu <strong>taller de escritura con profesor</strong>: recibes una consigna a tu nivel (o sobre tus temas) y escribes con calma.</>],
+        ["🔍",<>Entrena tu <strong>precisión</strong>: versión corregida completa + cada error desglosado con su explicación en español. Aquí el error se estudia, no se pasa por alto.</>],
+        ["📋",<>Puedes continuar con preguntas de seguimiento y al final crear tu <strong>cheat sheet</strong> con todo lo aprendido, listo para compartir o guardar.</>]
+      ]}/>
 
       {!prompt&&!loadingPrompt&&(
         <div>
@@ -2278,7 +2314,12 @@ function Story({state,registerActivity}){
     <div className="fadein">
       <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:20}}>
         <p style={{fontFamily:FEN,fontSize:18,marginBottom:4,textAlign:"center"}}>Read. Listen. Decide.</p>
-        <p style={{fontSize:13,color:C.inkSoft,textAlign:"center",marginBottom:14}}>Un mini-cuento de 3 capítulos donde tú decides qué pasa. Tus decisiones son en inglés — entenderlas es parte del juego.</p>
+        <p style={{fontSize:13,color:C.inkSoft,textAlign:"center",marginBottom:12}}>Un mini-cuento de 3 capítulos donde tú decides qué pasa. Tus decisiones son en inglés — entenderlas es parte del juego.</p>
+        <ModuleInfo id="story" points={[
+          ["📖",<>Lectura y listening <strong>con propósito</strong>: la historia se escribe a tu nivel y avanza según lo que TÚ elijas al final de cada capítulo.</>],
+          ["🎯",<>Las opciones vienen <strong>en inglés</strong> — entenderlas para decidir es parte del ejercicio. Cada elección genera un capítulo distinto.</>],
+          ["🎤",<>Cada oración trae audio, <strong>shadowing con puntaje</strong> y traducción bajo demanda. Al final, la expresión clave queda para tu mochila.</>]
+        ]}/>
         <BigButton onClick={()=>startStory()}>📖 Nueva historia (sorpresa)</BigButton>
         {error&&<p style={{fontSize:13,color:C.coral,marginTop:10,textAlign:"center"}}>{error}</p>}
         {personal.length>0&&(
@@ -2505,7 +2546,12 @@ function Listen({state,save,registerActivity}){
   return(
     <div className="fadein">
       <h2 style={{fontSize:24,fontWeight:700,marginBottom:4}}>Escuchar</h2>
-      <p style={{marginBottom:14,fontSize:14,color:C.inkSoft}}>Escucha primero <span className="hl">sin leer</span>. La transcripción se revela al final.</p>
+      <p style={{marginBottom:12,fontSize:14,color:C.inkSoft}}>Escucha primero <span className="hl">sin leer</span>. La transcripción se revela al final.</p>
+      <ModuleInfo id="listen" points={[
+        ["🎧",<>Entrena tu <strong>oído</strong> con diálogos generados a tu nivel exacto, sobre situaciones reales o <strong>tus temas</strong> personalizados.</>],
+        ["👂",<>El método: escucha <strong>sin leer</strong> (las veces que necesites, a la velocidad que quieras), responde la pregunta de comprensión, y recién ahí se revela la transcripción.</>],
+        ["🗣️",<>Con la transcripción abierta: audio por línea, <strong>shadowing con puntaje de pronunciación</strong>, traducciones bajo demanda y cheat sheet del audio.</>]
+      ]}/>
       {!exercise&&!loading&&(
         <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:20}}>
           <p style={{fontFamily:FEN,fontSize:18,marginBottom:14,textAlign:"center"}}>Train your ear.</p>
@@ -3479,6 +3525,11 @@ function Vocabulary({registerActivity,state}){
   if(!block) return(
     <div className="fadein">
       <p style={{fontSize:14,color:C.inkSoft,marginBottom:12}}>2.921 palabras esenciales en 28 bloques. <span className="hl">Elige un tema</span> — las que marques como fáciles dejan de aparecer hasta que toque repasarlas.</p>
+      <ModuleInfo id="vocab" points={[
+        ["🧠",<>Vocabulario esencial con <strong>repetición espaciada</strong> (el sistema de Anki): cada palabra reaparece justo antes de que la olvides — "Otra vez" la acerca, "Fácil" la aleja.</>],
+        ["✨",<>Máximo <strong>10 palabras nuevas al día</strong>: retención de verdad en vez de maratones que se olvidan en una semana.</>],
+        ["🎤",<>Cada palabra trae audio, <strong>práctica de pronunciación</strong> con puntaje y frases de ejemplo generadas por IA en contexto.</>]
+      ]}/>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(165px,1fr))",gap:8}}>
         {BANK_WORDS.map(b=>{
           const st=statsOf(b);
