@@ -971,6 +971,8 @@ function MixedReview({state,save,onClose}){
   const [idx,setIdx]=useState(0);
   const [flipped,setFlipped]=useState(false);
   const [counts,setCounts]=useState({good:0,again:0});
+  const [misses,setMisses]=useState([]);
+  const [sheet,setSheet]=useState(false);
   const [silent,setSilent]=useState(isSilent());
   const {speak,stop}=useSpeech();
   const card=queue[idx];
@@ -1033,6 +1035,7 @@ function MixedReview({state,save,onClose}){
       s[card.id]={...srsNext(prev,g),seen:(prev.seen||0)+1};vocabSaveSrs(s);
     }
     setCounts(c=>({...c,[g==="again"?"again":"good"]:c[g==="again"?"again":"good"]+1}));
+    if(g==="again"&&!misses.some(m=>m.head===card.back)) setMisses(m=>[...m,{head:card.back,sub:card.front,note:card.note||""}]);
     setFlipped(false);setAnswered(null);setBuilt([]);setIdx(i=>i+1);
   };
   return(
@@ -1161,6 +1164,15 @@ function MixedReview({state,save,onClose}){
             <p style={{fontSize:40,margin:"0 0 8px"}}>🎉</p>
             <p style={{fontWeight:700,fontSize:18,color:C.green,marginBottom:6}}>¡Repaso completado!</p>
             <p style={{fontSize:14,color:C.inkSoft,marginBottom:16}}>{counts.good} bien · {counts.again} para reintentar. Tu memoria de largo plazo te lo agradece.</p>
+            {misses.length>0&&(
+              <div style={{marginBottom:10}}>
+                <button onClick={()=>setSheet(true)}
+                  style={{width:"100%",padding:"13px 18px",borderRadius:16,border:`1.5px dashed ${C.green}`,background:"transparent",color:C.green,fontWeight:700,fontSize:15}}>
+                  📋 Cheat sheet de lo que fallaste ({misses.length})
+                </button>
+              </div>
+            )}
+            {sheet&&<CheatSheet title="Cheat sheet · Repaso del día" items={misses} onClose={()=>setSheet(false)}/>}
             {noMore?(
               <p className="fadein" style={{fontSize:14,fontWeight:700,color:C.green,marginBottom:12}}>No queda nada más vencido por hoy — ¡todo al día! 🙌</p>
             ):(
@@ -1252,6 +1264,78 @@ function useSpeechRec(onText,onEnd){
 // PRÁCTICA DE PRONUNCIACIÓN — compara lo dicho contra el objetivo
 // ============================================================
 function normEn(t){return (t||"").toLowerCase().replace(/[^a-z0-9' ]+/g," ").replace(/\s+/g," ").trim();}
+// ============================================================
+// 📋 CHEAT SHEET — resumen de sesión exportable como imagen PNG
+// ============================================================
+function cheatWrap(g,text,maxW){
+  const words=String(text||"").split(" ");const lines=[];let line="";
+  words.forEach(w=>{const t=line?line+" "+w:w;if(g.measureText(t).width>maxW&&line){lines.push(line);line=w;}else line=t;});
+  if(line)lines.push(line);return lines;
+}
+function cheatSheetPNG(title,items){
+  const W=1080,P=64,LW=W-P*2-28;
+  const cv=document.createElement("canvas");cv.width=W;cv.height=100;
+  const g=cv.getContext("2d");
+  const F={title:'800 46px system-ui, sans-serif',meta:'25px system-ui, sans-serif',head:'600 34px Georgia, serif',sub:'italic 27px system-ui, sans-serif',note:'25px system-ui, sans-serif'};
+  const pass=(draw)=>{
+    let y=P;
+    g.font=F.title; if(draw){g.fillStyle="#111827";cheatWrap(g,title,W-P*2).forEach(l=>{g.fillText(l,P,y+46);y+=56;});}else{y+=cheatWrap(g,title,W-P*2).length*56;}
+    g.font=F.meta;
+    if(draw){g.fillStyle="#6B7280";g.fillText("Fluido · "+new Date().toLocaleDateString("es-CL"),P,y+28);}
+    y+=64;
+    items.forEach(it=>{
+      g.font=F.head; const hs=cheatWrap(g,it.head,LW);
+      g.font=F.sub;  const ss=it.sub?cheatWrap(g,it.sub,LW):[];
+      g.font=F.note; const ns=it.note?cheatWrap(g,it.note,LW):[];
+      const bh=hs.length*46+ss.length*37+ns.length*34+22;
+      if(draw){g.fillStyle="#10B981";g.fillRect(P,y+6,7,bh-14);}
+      let yy=y+6;
+      hs.forEach(l=>{yy+=42;if(draw){g.fillStyle="#111827";g.font=F.head;g.fillText(l,P+28,yy);}yy+=4;});
+      ss.forEach(l=>{yy+=31;if(draw){g.fillStyle="#4B5563";g.font=F.sub;g.fillText(l,P+28,yy);}yy+=6;});
+      ns.forEach(l=>{yy+=28;if(draw){g.fillStyle="#6B7280";g.font=F.note;g.fillText(l,P+28,yy);}yy+=6;});
+      y+=bh+20;
+    });
+    y+=36;
+    if(draw){g.fillStyle="#9CA3AF";g.font=F.meta;g.fillText("angulodev.github.io/Fluido",P,y);}
+    return y+P;
+  };
+  const H=pass(false);
+  cv.height=Math.ceil(H);
+  g.fillStyle="#FFFFFF";g.fillRect(0,0,W,cv.height);
+  pass(true);
+  return cv.toDataURL("image/png");
+}
+function downloadCheatSheet(title,items){
+  try{
+    const url=cheatSheetPNG(title,items);
+    const a=document.createElement("a");
+    a.href=url;a.download="fluido-cheatsheet-"+new Date().toISOString().slice(0,10)+".png";
+    document.body.appendChild(a);a.click();a.remove();
+  }catch(e){alert("No se pudo generar la imagen en este navegador.");}
+}
+function CheatSheet({title,items,onClose}){
+  return(
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:320,background:"rgba(15,23,42,.5)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+      <div className="elev fadein" onClick={e=>e.stopPropagation()}
+        style={{width:"100%",maxWidth:560,maxHeight:"85vh",overflowY:"auto",background:C.paper,borderRadius:"22px 22px 0 0",padding:"18px 16px calc(24px + env(safe-area-inset-bottom, 0px))"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+          <strong style={{fontSize:17}}>📋 {title}</strong>
+          <button onClick={onClose} aria-label="Cerrar" style={{border:"none",background:"transparent",fontSize:20,color:C.inkSoft,padding:4}}>✕</button>
+        </div>
+        <p style={{fontSize:12.5,color:C.inkSoft,margin:"0 0 14px"}}>Tu resumen de esta sesión — guárdalo como imagen y repásalo donde quieras.</p>
+        {items.map((it,i)=>(
+          <div key={i} style={{borderLeft:`4px solid ${C.green}`,padding:"5px 0 5px 12px",marginBottom:12}}>
+            <p style={{margin:0,fontFamily:FEN,fontSize:16,fontWeight:700,color:C.ink}}>{it.head}</p>
+            {it.sub&&<p style={{margin:"2px 0 0",fontSize:13.5,color:C.inkSoft,fontStyle:"italic"}}>{it.sub}</p>}
+            {it.note&&<p style={{margin:"3px 0 0",fontSize:12.5,color:C.inkSoft}}>{it.note}</p>}
+          </div>
+        ))}
+        <BigButton onClick={()=>downloadCheatSheet(title,items)}>🖼️ Guardar como imagen</BigButton>
+      </div>
+    </div>
+  );
+}
+
 // Chips sin scroll horizontal: muestra pocos envueltos + hoja inferior con el catálogo completo
 function ChipsWithSheet({items,onPick,limit,title}){
   const [open,setOpen]=useState(false);
@@ -1729,6 +1813,19 @@ function Write({state,registerActivity}){
 
   useEffect(()=>{ writeSave({prompt,text,feedback,thread}); },[prompt,text,feedback,thread]);
 
+  const [sheet,setSheet]=useState(null);
+  const buildSheet=()=>{
+    const items=[];
+    if(feedback&&feedback.corrected) items.push({head:feedback.corrected,sub:prompt?prompt.prompt_es:"",note:"✅ Versión corregida"});
+    ((feedback&&feedback.errors)||[]).forEach(e=>items.push({head:e.fix,sub:"en vez de: "+e.original,note:e.why_es}));
+    thread.forEach(t=>{
+      if(t.feedback){
+        items.push({head:t.feedback.corrected,sub:t.question_en,note:"✅ Versión corregida"});
+        (t.feedback.errors||[]).forEach(e=>items.push({head:e.fix,sub:"en vez de: "+e.original,note:e.why_es}));
+      }
+    });
+    return items;
+  };
   const newPrompt=async(topic)=>{
     setLoadingPrompt(true);setError(null);setFeedback(null);setText("");setThread([]);
     try{
@@ -1931,6 +2028,11 @@ function Write({state,registerActivity}){
                   Nueva consigna
                 </button>
               </div>
+              <button onClick={()=>setSheet(buildSheet())}
+                style={{width:"100%",marginTop:8,padding:"11px 14px",borderRadius:10,border:`1.5px dashed ${C.green}`,background:"transparent",color:C.green,fontWeight:700,fontSize:13}}>
+                📋 Crear cheat sheet de esta sesión
+              </button>
+              {sheet&&<CheatSheet title="Cheat sheet · Escritura" items={sheet} onClose={()=>setSheet(null)}/>}
             </div>
           )}
         </div>
@@ -2259,6 +2361,7 @@ function Listen({state,save,registerActivity}){
   const [activeLine,setActiveLine]=useState(-1);
   const [shadow,setShadow]=useState(false);
   const [showEs,setShowEs]=useState({});
+  const [lsSheet,setLsSheet]=useState(false);
   const [topicSugs]=useState(()=>[...LISTEN_TOPICS].sort(()=>Math.random()-0.5).slice(0,10));
   const [manageTopics,setManageTopics]=useState(false);
   const [personal,setPersonal]=useState(()=>loadPersonalTopics());
@@ -2517,7 +2620,15 @@ function Listen({state,save,registerActivity}){
                   </div>
                 </div>
               )}
-              <div style={{display:"flex",gap:8,marginTop:10}}>
+              {lsSheet&&<CheatSheet title="Cheat sheet · Escuchar" items={[
+                {head:exercise.key_phrase_en,sub:exercise.key_phrase_es,note:"⭐ Expresión para tu mochila"},
+                ...exercise.dialogue.map(d=>({head:d.line,sub:d.line_es||"",note:d.speaker}))
+              ]} onClose={()=>setLsSheet(false)}/>}
+              <button onClick={()=>setLsSheet(true)}
+                style={{width:"100%",marginTop:10,padding:"11px 14px",borderRadius:14,border:`1.5px dashed ${C.green}`,background:"transparent",color:C.green,fontWeight:700,fontSize:14}}>
+                📋 Cheat sheet de este audio
+              </button>
+              <div style={{display:"flex",gap:8,marginTop:8}}>
                 <button onClick={()=>newExercise()} style={{flex:1,padding:14,borderRadius:14,border:`2px dashed ${C.blue}`,background:"transparent",color:C.blue,fontWeight:600,fontSize:15}}>🎲 Otro audio</button>
                 <button onClick={()=>{setExercise(null);setPicked(null);setRevealed(false);setInfo(null);try{sessionStorage.removeItem("fluido-listen");}catch(e){}}}
                   style={{flex:1,padding:14,borderRadius:14,border:`2px dashed ${C.green}`,background:"transparent",color:C.green,fontWeight:600,fontSize:15}}>🎯 Elegir tema</button>
