@@ -1,4 +1,4 @@
-const CACHE = "fluido-v2";
+const CACHE = "fluido-v3";
 const CORE = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
@@ -31,5 +31,17 @@ self.addEventListener("fetch", e => {
           hit || (e.request.mode === "navigate" ? caches.match("./index.html") : undefined)
         )
       )
+  );
+});
+
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  e.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+      for (const c of list) {
+        if ("focus" in c) { c.navigate && c.navigate("./"); return c.focus(); }
+      }
+      return clients.openWindow("./");
+    })
   );
 });

@@ -525,7 +525,10 @@ function App(){
       }catch(e){}
     };
     check(); const id=setInterval(check,60000);
-    return()=>clearInterval(id);
+    const onVis=()=>{ if(document.visibilityState==="visible") check(); };
+    document.addEventListener("visibilitychange",onVis);
+    window.addEventListener("focus",check);
+    return()=>{clearInterval(id);document.removeEventListener("visibilitychange",onVis);window.removeEventListener("focus",check);};
   },[]);
 
   const registerActivity=useCallback((block,extra)=>{
@@ -3021,7 +3024,7 @@ function Settings({state,save,onAIChanged,onThemeChange}){
 
   // ── Recordatorio diario ──
   const [reminder,setReminder]=useState(()=>{try{return JSON.parse(localStorage.getItem("fluido-reminder")||"null")||{enabled:false,time:"20:00"};}catch(e){return{enabled:false,time:"20:00"};}});
-  const saveReminder=(r)=>{setReminder(r);try{localStorage.setItem("fluido-reminder",JSON.stringify(r));}catch(e){}};
+  const saveReminder=(r)=>{setReminder(r);try{localStorage.setItem("fluido-reminder",JSON.stringify(r));localStorage.removeItem("fluido-reminder-last");}catch(e){}};
   const toggleReminder=async()=>{
     if(!reminder.enabled){
       if(!("Notification" in window)){alert("Tu navegador no soporta notificaciones.");return;}
@@ -3125,7 +3128,7 @@ function Settings({state,save,onAIChanged,onThemeChange}){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
           <div>
             <p style={{fontWeight:600,marginBottom:2}}>🔔 Recordatorio diario</p>
-            <p style={{fontSize:13,color:C.inkSoft,margin:0}}>Te avisa a la hora elegida. Funciona con la app o PWA abierta (aunque sea en segundo plano).</p>
+            <p style={{fontSize:13,color:C.inkSoft,margin:0}}>Te avisa a la hora elegida (o apenas vuelvas a abrir la app si esa hora ya pasó). Requiere la app o PWA abierta — Android congela las webs cerradas.</p>
           </div>
           <button onClick={toggleReminder}
             style={{flexShrink:0,padding:"9px 16px",borderRadius:999,border:"none",background:reminder.enabled?C.green:C.paper,color:reminder.enabled?"#fff":C.inkSoft,fontWeight:700,fontSize:13,boxShadow:reminder.enabled?"none":`inset 0 0 0 1.5px ${C.line}`}}>
