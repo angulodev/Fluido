@@ -406,6 +406,20 @@ function rankVoice(v){
   if(v.localService===false) s+=5;
   return s;
 }
+// 🔔 Notificación compatible: Android Chrome exige Service Worker; new Notification() solo sirve en desktop
+function fluidoNotify(title,body){
+  const opts={body,icon:"./icon-192.png",badge:"./icon-192.png",tag:"fluido-daily"};
+  try{
+    if(navigator.serviceWorker&&navigator.serviceWorker.ready){
+      navigator.serviceWorker.ready
+        .then(reg=>reg.showNotification(title,opts))
+        .catch(()=>{try{new Notification(title,opts);}catch(e){}});
+      return;
+    }
+  }catch(e){}
+  try{new Notification(title,opts);}catch(e){}
+}
+
 // 🔇 Modo silencio global — para repasar sin que la app hable sola (metro, oficina, gente cerca)
 function isSilent(){try{return localStorage.getItem("fluido-silent")==="1";}catch(e){return false;}}
 function saveSilent(v){try{localStorage.setItem("fluido-silent",v?"1":"0");}catch(e){}}
@@ -494,6 +508,7 @@ function App(){
   },[]);
 
   // 🔔 Recordatorio diario — funciona con la app/PWA abierta (aunque sea en segundo plano)
+  // Android Chrome prohíbe new Notification(): hay que pasar por el Service Worker
   useEffect(()=>{
     const check=()=>{
       try{
@@ -504,7 +519,7 @@ function App(){
         const [h,m]=(r.time||"20:00").split(":").map(Number);
         const now=new Date();
         if(now.getHours()>h||(now.getHours()===h&&now.getMinutes()>=m)){
-          new Notification("Fluido 🇬🇧",{body:"Tus 15 minutos de inglés te esperan. ¡No pierdas la racha! 🔥",icon:"./icon-192.png"});
+          fluidoNotify("Fluido 🇬🇧","Tus 15 minutos de inglés te esperan. ¡No pierdas la racha! 🔥");
           localStorage.setItem("fluido-reminder-last",today);
         }
       }catch(e){}
@@ -2992,6 +3007,8 @@ function ProfileEditor({state,save,onClose}){
 // AJUSTES — con selector de tema
 // ============================================================
 function Settings({state,save,onAIChanged,onThemeChange}){
+  const [csOpen,setCsOpen]=useState(false);
+  const csCount=loadSheets().length;
   const [expanded,setExpanded]=useState(null);
   const [editKeys,setEditKeys]=useState({});
   const [testState,setTestState]=useState({});
@@ -3073,6 +3090,21 @@ function Settings({state,save,onAIChanged,onThemeChange}){
     <div className="fadein">
       <h2 style={{fontSize:24,fontWeight:700,marginBottom:14}}>Ajustes</h2>
 
+      {/* --- CHEAT SHEETS --- */}
+      <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+          <div>
+            <p style={{fontWeight:600,marginBottom:2}}>🗂️ Mis cheat sheets</p>
+            <p style={{fontSize:13,color:C.inkSoft,margin:0}}>{csCount?`${csCount} ficha${csCount===1?"":"s"} de estudio guardada${csCount===1?"":"s"} — reábrelas, compártelas o elimínalas.`:"Aún no tienes fichas guardadas. Se crean desde Escribir, Escuchar, el Repaso o al finalizar una sesión 🎓."}</p>
+          </div>
+          <button onClick={()=>setCsOpen(true)} disabled={!csCount}
+            style={{flexShrink:0,padding:"9px 15px",borderRadius:999,border:"none",background:csCount?C.blue:C.paper,color:csCount?"#fff":C.inkSoft,fontWeight:700,fontSize:13,opacity:csCount?1:0.7}}>
+            Ver
+          </button>
+        </div>
+        {csOpen&&<SheetHistory level={state.level} onClose={()=>setCsOpen(false)}/>}
+      </div>
+
       {/* --- VOZ TTS --- */}
       <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:14}}>
         <p style={{fontWeight:600,marginBottom:4}}>🗣️ Voz del audio en inglés</p>
@@ -3101,10 +3133,14 @@ function Settings({state,save,onAIChanged,onThemeChange}){
           </button>
         </div>
         {reminder.enabled&&(
-          <div className="fadein" style={{marginTop:12,display:"flex",alignItems:"center",gap:10}}>
+          <div className="fadein" style={{marginTop:12,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
             <span style={{fontSize:13,color:C.inkSoft}}>Hora del recordatorio:</span>
             <input type="time" value={reminder.time} onChange={e=>saveReminder({...reminder,time:e.target.value})}
               style={{padding:"8px 10px",borderRadius:10,border:`1.5px solid ${C.line}`,background:C.paper,color:C.ink,fontSize:14}}/>
+            <button onClick={()=>{if(!("Notification" in window)||Notification.permission!=="granted"){alert("Primero activa el permiso de notificaciones.");return;}fluidoNotify("Fluido 🇬🇧","🔔 ¡Prueba exitosa! Así se verá tu recordatorio diario.");}}
+              style={{padding:"8px 13px",borderRadius:999,border:`1.5px solid ${C.blue}`,background:C.blueSoft,color:C.blue,fontWeight:700,fontSize:12.5}}>
+              🔔 Probar ahora
+            </button>
           </div>
         )}
       </div>
