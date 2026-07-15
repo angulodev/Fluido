@@ -854,6 +854,8 @@ function TabBar({tab,setTab,level}){
 }
 function Home({state,save,go}){
   const [mixOpen,setMixOpen]=useState(false);
+  const [csOpen,setCsOpen]=useState(false);
+  const csCount=loadSheets().length;
   const desktop=useIsDesktop();
   const d=state.daily;
   const cfg=getAIConfig()||{};
@@ -900,6 +902,14 @@ function Home({state,save,go}){
       </div>
       {mixOpen&&<MixedReview state={state} save={save} onClose={()=>setMixOpen(false)}/>}
       <div style={{marginTop:20}}>
+      {csCount>0&&(
+        <button onClick={()=>setCsOpen(true)} className="elev-sm"
+          style={{width:"100%",marginTop:14,display:"flex",justifyContent:"space-between",alignItems:"center",background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:"13px 16px"}}>
+          <span style={{fontWeight:700,fontSize:14,color:C.ink}}>🗂️ Mis cheat sheets</span>
+          <span style={{fontSize:13,color:C.inkSoft,fontWeight:600}}>{csCount} guardado{csCount===1?"":"s"} →</span>
+        </button>
+      )}
+      {csOpen&&<SheetHistory level={state.level} onClose={()=>setCsOpen(false)}/>}
         <p style={{fontSize:13,color:C.inkSoft,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Misiones de hoy</p>
         <div style={{display:"grid",gridTemplateColumns:desktop?"1fr 1fr":"1fr",gap:desktop?10:0}}>
         {goals.map(g=>{
@@ -1319,12 +1329,22 @@ function dataUrlDownload(url){
   a.href=url;a.download="fluido-cheatsheet-"+new Date().toISOString().slice(0,10)+".png";
   document.body.appendChild(a);a.click();a.remove();
 }
-function CheatSheet({title,items,level,withTips,onClose}){
+// Historial de cheat sheets (se archivan automáticamente, últimos 30)
+const SHEETS_KEY="fluido-cheatsheets";
+function loadSheets(){try{return JSON.parse(localStorage.getItem(SHEETS_KEY)||"[]");}catch(e){return[];}}
+function saveSheetsList(a){try{localStorage.setItem(SHEETS_KEY,JSON.stringify(a.slice(-30)));}catch(e){}}
+function archiveSheet(rec){const a=loadSheets().filter(x=>x.id!==rec.id);a.push(rec);saveSheetsList(a);}
+function deleteSheet(id){saveSheetsList(loadSheets().filter(x=>x.id!==id));}
+
+function CheatSheet({title,items,level,withTips,preExtra,sheetId,onClose}){
   const base={icon:"📌",label:"Lo de esta sesión",color:"#10B981",items};
-  const [extra,setExtra]=useState(null);
-  const [tipsLoading,setTipsLoading]=useState(!!withTips);
+  const idRef=useRef(sheetId||("cs"+Date.now()+Math.random().toString(36).slice(2,6)));
+  const [extra,setExtra]=useState(preExtra||null);
+  const [tipsLoading,setTipsLoading]=useState(!!withTips&&!preExtra);
+  useEffect(()=>{ archiveSheet({id:idRef.current,ts:Date.now(),title,items,extra:preExtra||null}); },[]);
+  useEffect(()=>{ if(extra&&!preExtra) archiveSheet({id:idRef.current,ts:Date.now(),title,items,extra}); },[extra]);
   useEffect(()=>{
-    if(!withTips) return;
+    if(!withTips||preExtra) return;
     let alive=true;
     (async()=>{
       try{
@@ -1458,6 +1478,39 @@ function SessionFab({level}){
       )}
       {sheet&&<CheatSheet title={`Resumen de tu sesión · ${mins} min`} items={sheet} level={level} withTips={true}
         onClose={()=>{setSheet(null);sesEnd();}}/>}
+    </div>
+  );
+}
+
+// 🗂️ Historial de cheat sheets guardados
+function SheetHistory({level,onClose}){
+  const [list,setList]=useState(()=>loadSheets().slice().reverse());
+  const [open,setOpen]=useState(null);
+  const del=(id)=>{deleteSheet(id);setList(loadSheets().slice().reverse());};
+  return(
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:310,background:"rgba(15,23,42,.5)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+      <div className="elev fadein" onClick={e=>e.stopPropagation()}
+        style={{width:"100%",maxWidth:560,maxHeight:"80vh",overflowY:"auto",background:C.paper,borderRadius:"22px 22px 0 0",padding:"18px 16px calc(24px + env(safe-area-inset-bottom, 0px))"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <strong style={{fontSize:17}}>🗂️ Mis cheat sheets</strong>
+          <button onClick={onClose} aria-label="Cerrar" style={{border:"none",background:"transparent",fontSize:20,color:C.inkSoft,padding:4}}>✕</button>
+        </div>
+        {list.length===0&&(
+          <p style={{fontSize:13.5,color:C.inkSoft,lineHeight:1.6}}>Aún no tienes cheat sheets guardados. Se archivan solos cada vez que creas uno desde Escribir, Escuchar, el Repaso del día o al finalizar una sesión 🎓 — vuelve aquí para reabrirlos y compartirlos cuando quieras.</p>
+        )}
+        {list.map(rec=>(
+          <div key={rec.id} style={{display:"flex",alignItems:"center",gap:8,background:C.card,border:`1px solid ${C.line}`,borderRadius:14,padding:"11px 12px",marginBottom:8}}>
+            <button onClick={()=>setOpen(rec)} style={{flex:1,textAlign:"left",border:"none",background:"transparent",padding:0}}>
+              <p style={{margin:0,fontWeight:700,fontSize:14,color:C.ink}}>📋 {rec.title}</p>
+              <p style={{margin:"2px 0 0",fontSize:12,color:C.inkSoft}}>
+                {new Date(rec.ts).toLocaleDateString("es-CL")} · {new Date(rec.ts).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})} · {rec.items.length} nota{rec.items.length===1?"":"s"}{rec.extra?" · ✨ con tips":""}
+              </p>
+            </button>
+            <button onClick={()=>del(rec.id)} aria-label={`Eliminar ${rec.title}`} style={{border:"none",background:"transparent",color:C.coral,fontSize:15,padding:6,flexShrink:0}}>✕</button>
+          </div>
+        ))}
+        {open&&<CheatSheet title={open.title} items={open.items} level={level} withTips={false} preExtra={open.extra} sheetId={open.id} onClose={()=>setOpen(null)}/>}
+      </div>
     </div>
   );
 }
