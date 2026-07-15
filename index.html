@@ -1172,7 +1172,7 @@ function MixedReview({state,save,onClose}){
                 </button>
               </div>
             )}
-            {sheet&&<CheatSheet title="Cheat sheet · Repaso del día" items={misses} onClose={()=>setSheet(false)}/>}
+            {sheet&&<CheatSheet title="Cheat sheet · Repaso del día" items={misses} level={state.level} withTips={true} onClose={()=>setSheet(false)}/>}
             {noMore?(
               <p className="fadein" style={{fontSize:14,fontWeight:700,color:C.green,marginBottom:12}}>No queda nada más vencido por hoy — ¡todo al día! 🙌</p>
             ):(
@@ -1265,38 +1265,45 @@ function useSpeechRec(onText,onEnd){
 // ============================================================
 function normEn(t){return (t||"").toLowerCase().replace(/[^a-z0-9' ]+/g," ").replace(/\s+/g," ").trim();}
 // ============================================================
-// 📋 CHEAT SHEET — resumen de sesión exportable como imagen PNG
+// 📋 CHEAT SHEET — ficha de estudio con tips de IA, exportable y compartible
 // ============================================================
 function cheatWrap(g,text,maxW){
   const words=String(text||"").split(" ");const lines=[];let line="";
   words.forEach(w=>{const t=line?line+" "+w:w;if(g.measureText(t).width>maxW&&line){lines.push(line);line=w;}else line=t;});
   if(line)lines.push(line);return lines;
 }
-function cheatSheetPNG(title,items){
+function cheatSheetPNG(title,sections){
   const W=1080,P=64,LW=W-P*2-28;
   const cv=document.createElement("canvas");cv.width=W;cv.height=100;
   const g=cv.getContext("2d");
-  const F={title:'800 46px system-ui, sans-serif',meta:'25px system-ui, sans-serif',head:'600 34px Georgia, serif',sub:'italic 27px system-ui, sans-serif',note:'25px system-ui, sans-serif'};
+  const F={title:'800 46px system-ui, sans-serif',meta:'25px system-ui, sans-serif',sec:'800 30px system-ui, sans-serif',head:'600 34px Georgia, serif',sub:'italic 27px system-ui, sans-serif',note:'25px system-ui, sans-serif'};
   const pass=(draw)=>{
     let y=P;
     g.font=F.title; if(draw){g.fillStyle="#111827";cheatWrap(g,title,W-P*2).forEach(l=>{g.fillText(l,P,y+46);y+=56;});}else{y+=cheatWrap(g,title,W-P*2).length*56;}
     g.font=F.meta;
     if(draw){g.fillStyle="#6B7280";g.fillText("Fluido · "+new Date().toLocaleDateString("es-CL"),P,y+28);}
-    y+=64;
-    items.forEach(it=>{
-      g.font=F.head; const hs=cheatWrap(g,it.head,LW);
-      g.font=F.sub;  const ss=it.sub?cheatWrap(g,it.sub,LW):[];
-      g.font=F.note; const ns=it.note?cheatWrap(g,it.note,LW):[];
-      const bh=hs.length*46+ss.length*37+ns.length*34+22;
-      if(draw){g.fillStyle="#10B981";g.fillRect(P,y+6,7,bh-14);}
-      let yy=y+6;
-      hs.forEach(l=>{yy+=42;if(draw){g.fillStyle="#111827";g.font=F.head;g.fillText(l,P+28,yy);}yy+=4;});
-      ss.forEach(l=>{yy+=31;if(draw){g.fillStyle="#4B5563";g.font=F.sub;g.fillText(l,P+28,yy);}yy+=6;});
-      ns.forEach(l=>{yy+=28;if(draw){g.fillStyle="#6B7280";g.font=F.note;g.fillText(l,P+28,yy);}yy+=6;});
-      y+=bh+20;
+    y+=70;
+    sections.forEach(sec=>{
+      if(!sec.items.length) return;
+      g.font=F.sec;
+      if(draw){g.fillStyle=sec.color;g.fillText(sec.icon+"  "+sec.label.toUpperCase(),P,y+30);}
+      y+=52;
+      sec.items.forEach(it=>{
+        g.font=F.head; const hs=cheatWrap(g,it.head,LW);
+        g.font=F.sub;  const ss=it.sub?cheatWrap(g,it.sub,LW):[];
+        g.font=F.note; const ns=it.note?cheatWrap(g,it.note,LW):[];
+        const bh=hs.length*46+ss.length*37+ns.length*34+22;
+        if(draw){g.fillStyle=sec.color;g.fillRect(P,y+6,7,bh-14);}
+        let yy=y+6;
+        hs.forEach(l=>{yy+=42;if(draw){g.fillStyle="#111827";g.font=F.head;g.fillText(l,P+28,yy);}yy+=4;});
+        ss.forEach(l=>{yy+=31;if(draw){g.fillStyle="#4B5563";g.font=F.sub;g.fillText(l,P+28,yy);}yy+=6;});
+        ns.forEach(l=>{yy+=28;if(draw){g.fillStyle="#6B7280";g.font=F.note;g.fillText(l,P+28,yy);}yy+=6;});
+        y+=bh+16;
+      });
+      y+=22;
     });
-    y+=36;
-    if(draw){g.fillStyle="#9CA3AF";g.font=F.meta;g.fillText("angulodev.github.io/Fluido",P,y);}
+    y+=26;
+    if(draw){g.fillStyle="#9CA3AF";g.font=F.meta;g.fillText("Hecho con Fluido · angulodev.github.io/Fluido",P,y);}
     return y+P;
   };
   const H=pass(false);
@@ -1305,32 +1312,79 @@ function cheatSheetPNG(title,items){
   pass(true);
   return cv.toDataURL("image/png");
 }
-function downloadCheatSheet(title,items){
-  try{
-    const url=cheatSheetPNG(title,items);
-    const a=document.createElement("a");
-    a.href=url;a.download="fluido-cheatsheet-"+new Date().toISOString().slice(0,10)+".png";
-    document.body.appendChild(a);a.click();a.remove();
-  }catch(e){alert("No se pudo generar la imagen en este navegador.");}
+function dataUrlDownload(url){
+  const a=document.createElement("a");
+  a.href=url;a.download="fluido-cheatsheet-"+new Date().toISOString().slice(0,10)+".png";
+  document.body.appendChild(a);a.click();a.remove();
 }
-function CheatSheet({title,items,onClose}){
+function CheatSheet({title,items,level,withTips,onClose}){
+  const base={icon:"📌",label:"Lo de esta sesión",color:"#10B981",items};
+  const [extra,setExtra]=useState(null);
+  const [tipsLoading,setTipsLoading]=useState(!!withTips);
+  useEffect(()=>{
+    if(!withTips) return;
+    let alive=true;
+    (async()=>{
+      try{
+        const compact=items.slice(0,12).map(it=>({en:it.head,es:it.sub||"",nota:it.note||""}));
+        const r=await askAI_JSON(
+          `Nivel del estudiante: ${level||"A2"}. Estas son las notas de su sesión de práctica de inglés:\n${JSON.stringify(compact)}\n\nGenera material de estudio breve y ESPECÍFICO a estas notas (no genérico). Devuelve SOLO JSON: {"tips":["2-3 tips concretos en español sobre los patrones de error o las estructuras vistas"],"repasar":[{"en":"elemento en inglés que conviene repasar","es":"traducción"}],"consejo_es":"un consejo breve y motivador"}`,
+          "Eres un profesor de inglés que crea material de repaso conciso, específico y accionable.");
+        if(!alive) return;
+        setExtra({
+          tips:{icon:"💡",label:"Tips",color:"#D97706",items:(r.tips||[]).map(t=>({head:t}))},
+          rep:{icon:"🔁",label:"Para repasar",color:"#3B82F6",items:(r.repasar||[]).map(x=>({head:x.en,sub:x.es}))},
+          con:{icon:"🎯",label:"Consejo",color:"#7C6FE0",items:r.consejo_es?[{head:r.consejo_es}]:[]}
+        });
+      }catch(e){}
+      if(alive) setTipsLoading(false);
+    })();
+    return()=>{alive=false;};
+  },[]);
+  const allSections=[base,...(extra?[extra.tips,extra.rep,extra.con]:[])].filter(s=>s.items.length);
+  const shareSheet=async()=>{
+    try{
+      const url=cheatSheetPNG(title,allSections);
+      const blob=await (await fetch(url)).blob();
+      const file=new File([blob],"fluido-cheatsheet.png",{type:"image/png"});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){
+        await navigator.share({files:[file],title:"Mi cheat sheet de Fluido 🇬🇧"});
+      } else { dataUrlDownload(url); }
+    }catch(e){/* usuario canceló el share */}
+  };
+  const Section=({sec})=>sec.items.length?(
+    <div style={{marginBottom:14}}>
+      <p style={{fontSize:12,fontWeight:800,letterSpacing:1.2,textTransform:"uppercase",color:sec.color,margin:"0 0 8px"}}>{sec.icon} {sec.label}</p>
+      {sec.items.map((it,i)=>(
+        <div key={i} style={{borderLeft:`4px solid ${sec.color}`,padding:"5px 0 5px 12px",marginBottom:10}}>
+          <p style={{margin:0,fontFamily:FEN,fontSize:16,fontWeight:700,color:C.ink}}>{it.head}</p>
+          {it.sub&&<p style={{margin:"2px 0 0",fontSize:13.5,color:C.inkSoft,fontStyle:"italic"}}>{it.sub}</p>}
+          {it.note&&<p style={{margin:"3px 0 0",fontSize:12.5,color:C.inkSoft}}>{it.note}</p>}
+        </div>
+      ))}
+    </div>
+  ):null;
   return(
     <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:320,background:"rgba(15,23,42,.5)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
       <div className="elev fadein" onClick={e=>e.stopPropagation()}
-        style={{width:"100%",maxWidth:560,maxHeight:"85vh",overflowY:"auto",background:C.paper,borderRadius:"22px 22px 0 0",padding:"18px 16px calc(24px + env(safe-area-inset-bottom, 0px))"}}>
+        style={{width:"100%",maxWidth:560,maxHeight:"88vh",overflowY:"auto",background:C.paper,borderRadius:"22px 22px 0 0",padding:"18px 16px calc(24px + env(safe-area-inset-bottom, 0px))"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
           <strong style={{fontSize:17}}>📋 {title}</strong>
           <button onClick={onClose} aria-label="Cerrar" style={{border:"none",background:"transparent",fontSize:20,color:C.inkSoft,padding:4}}>✕</button>
         </div>
-        <p style={{fontSize:12.5,color:C.inkSoft,margin:"0 0 14px"}}>Tu resumen de esta sesión — guárdalo como imagen y repásalo donde quieras.</p>
-        {items.map((it,i)=>(
-          <div key={i} style={{borderLeft:`4px solid ${C.green}`,padding:"5px 0 5px 12px",marginBottom:12}}>
-            <p style={{margin:0,fontFamily:FEN,fontSize:16,fontWeight:700,color:C.ink}}>{it.head}</p>
-            {it.sub&&<p style={{margin:"2px 0 0",fontSize:13.5,color:C.inkSoft,fontStyle:"italic"}}>{it.sub}</p>}
-            {it.note&&<p style={{margin:"3px 0 0",fontSize:12.5,color:C.inkSoft}}>{it.note}</p>}
-          </div>
-        ))}
-        <BigButton onClick={()=>downloadCheatSheet(title,items)}>🖼️ Guardar como imagen</BigButton>
+        <p style={{fontSize:12.5,color:C.inkSoft,margin:"0 0 14px"}}>Tu ficha de estudio — compártela o guárdala como imagen.</p>
+        {allSections.map((sec,i)=><Section key={i} sec={sec}/>)}
+        {tipsLoading&&<p style={{fontSize:13,color:C.inkSoft,margin:"0 0 12px"}}>✨ Generando tips y material de repaso…</p>}
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={shareSheet}
+            style={{flex:1,padding:"14px 16px",borderRadius:16,border:"none",background:"#25D366",color:"#fff",fontWeight:800,fontSize:15,boxShadow:"0 8px 20px #25D36655"}}>
+            📤 Compartir
+          </button>
+          <button onClick={()=>dataUrlDownload(cheatSheetPNG(title,allSections))}
+            style={{flex:1,padding:"14px 16px",borderRadius:16,border:`1.5px solid ${C.line}`,background:C.card,color:C.ink,fontWeight:700,fontSize:15}}>
+            🖼️ Guardar
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -2032,7 +2086,7 @@ function Write({state,registerActivity}){
                 style={{width:"100%",marginTop:8,padding:"11px 14px",borderRadius:10,border:`1.5px dashed ${C.green}`,background:"transparent",color:C.green,fontWeight:700,fontSize:13}}>
                 📋 Crear cheat sheet de esta sesión
               </button>
-              {sheet&&<CheatSheet title="Cheat sheet · Escritura" items={sheet} onClose={()=>setSheet(null)}/>}
+              {sheet&&<CheatSheet title="Cheat sheet · Escritura" items={sheet} level={state.level} withTips={true} onClose={()=>setSheet(null)}/>}
             </div>
           )}
         </div>
@@ -2623,7 +2677,7 @@ function Listen({state,save,registerActivity}){
               {lsSheet&&<CheatSheet title="Cheat sheet · Escuchar" items={[
                 {head:exercise.key_phrase_en,sub:exercise.key_phrase_es,note:"⭐ Expresión para tu mochila"},
                 ...exercise.dialogue.map(d=>({head:d.line,sub:d.line_es||"",note:d.speaker}))
-              ]} onClose={()=>setLsSheet(false)}/>}
+              ]} level={state.level} withTips={true} onClose={()=>setLsSheet(false)}/>}
               <button onClick={()=>setLsSheet(true)}
                 style={{width:"100%",marginTop:10,padding:"11px 14px",borderRadius:14,border:`1.5px dashed ${C.green}`,background:"transparent",color:C.green,fontWeight:700,fontSize:14}}>
                 📋 Cheat sheet de este audio
