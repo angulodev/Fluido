@@ -1734,7 +1734,7 @@ function Talk({state,registerActivity}){
     try{
       const history=[...messages,myMsg].map(m=>(m.role==="them"?"INTERLOCUTOR: ":"ESTUDIANTE: ")+m.text).join("\n");
       const data=await askAI_JSON(
-        `Perfil: ${profileForPrompts(state,true)}\nSituación: ${scenario.context_es}\n\nConversación:\n${history}\n\nCorrige errores, da versión natural y continúa como interlocutor.\n\nDevuelve JSON: {"errors":[{"wrong":"error","right":"corrección","why_es":"explicación"}],"natural_en":"versión nativa o null","tip_es":"consejo breve o null","reply_en":"respuesta del interlocutor que invite a seguir, AJUSTADA a la complejidad del nivel indicado en el perfil"${state.level==="A0"?',"reply_es":"traducción al español de reply_en"':""}}`,
+        `Perfil: ${profileForPrompts(state,true)}\nSituación: ${scenario.context_es}\n\nConversación previa (SOLO contexto, NO la corrijas):\n${history}\n\nÚLTIMO MENSAJE DEL ESTUDIANTE — el ÚNICO que debes corregir: """${text}"""\n\nREGLAS ESTRICTAS:\n- "errors" y "natural_en" se refieren EXCLUSIVAMENTE a ese último mensaje. NO repitas ni acumules correcciones de mensajes anteriores.\n- "natural_en" es la versión natural SOLO de ese último mensaje (null si ya suena bien). PROHIBIDO concatenar mensajes previos en natural_en.\n${(state.level==="A0"||state.level==="A2")?"- Si en la corrección o en natural_en usas una contracción (I'd, you'll, won't, it's…), incluye la forma completa entre paréntesis la primera vez: ej. I'd like (I would like). El estudiante es de nivel básico y puede no conocerlas.\n":""}\nDespués continúa la conversación como interlocutor.\n\nDevuelve JSON: {"errors":[{"wrong":"error","right":"corrección","why_es":"explicación"}],"natural_en":"versión nativa SOLO del último mensaje, o null","tip_es":"consejo breve o null","reply_en":"respuesta del interlocutor que invite a seguir, AJUSTADA a la complejidad del nivel indicado en el perfil","reply_es":"traducción al español de reply_en"}`,
         "Eres un coach de inglés cálido y preciso. Corriges sin desanimar.");
       setMessages(m=>{const c=[...m];c[c.length-1]={...myMsg,feedback:data};return[...c,{role:"them",text:data.reply_en,es:data.reply_es||null}];});
       if(voiceMode) setTimeout(()=>speak(data.reply_en),300);
@@ -1744,6 +1744,7 @@ function Talk({state,registerActivity}){
     setLoading(false);
   };
 
+  const lastFbIdx=messages.reduce((a,m,i)=>m.feedback?i:a,-1);
   return(
     <div className="fadein" style={{display:"flex",flexDirection:"column",minHeight:"calc(100vh - 140px)"}}>
       <h2 style={{fontSize:24,fontWeight:700,marginBottom:4}}>Conversar</h2>
@@ -1815,11 +1816,11 @@ function Talk({state,registerActivity}){
                   ? <div className="fadein" style={{fontSize:12.5,color:C.inkSoft,fontStyle:"italic",marginTop:5,fontFamily:FUI,borderTop:`1px dashed ${C.line}`,paddingTop:5}}>🇪🇸 {m.es}</div>
                   : <button onClick={()=>setRevealed(r=>({...r,[i]:true}))}
                       style={{display:"inline-flex",alignItems:"center",gap:4,marginTop:6,padding:"4px 10px",borderRadius:999,border:`1px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:600,fontSize:11,fontFamily:FUI}}>
-                      💡 Ver pista
+                      🇪🇸 Traducción
                     </button>
               )}
             </div>
-            {m.feedback&&<Feedback fb={m.feedback}/>}
+            {m.feedback&&<Feedback fb={m.feedback} collapsed={i!==lastFbIdx}/>}
           </div>
         ))}
         {failed&&<AudioWarning/>}
@@ -1853,14 +1854,22 @@ function Talk({state,registerActivity}){
     </div>
   );
 }
-function Feedback({fb}){
+function Feedback({fb,collapsed}){
   const hasErrors=fb.errors&&fb.errors.length>0;
+  const [open,setOpen]=useState(!collapsed);
+  useEffect(()=>{ if(collapsed) setOpen(false); },[collapsed]);
   if(!hasErrors&&!fb.natural_en&&!fb.tip_es) return<div style={{maxWidth:"85%",marginLeft:"auto",marginTop:4,fontSize:13,color:C.green,textAlign:"right"}}>✓ Perfecto, así se dice</div>;
+  if(!open) return(
+    <button onClick={()=>setOpen(true)}
+      style={{display:"block",marginLeft:"auto",marginTop:4,border:"none",background:"transparent",color:C.inkSoft,fontSize:12,fontWeight:600,textDecoration:"underline dotted",padding:"2px 0"}}>
+      🖍️ {hasErrors?`${fb.errors.length} corrección${fb.errors.length===1?"":"es"}`:"feedback"} — ver
+    </button>);
   return(
     <div className="fadein" style={{maxWidth:"92%",marginLeft:"auto",marginTop:6,background:C.card,border:`1px dashed ${C.line}`,borderRadius:12,padding:"10px 12px",fontSize:14}}>
       {hasErrors&&fb.errors.map((e,i)=>(<p key={i} style={{margin:"0 0 6px",lineHeight:1.6}}><span className="hl-red" style={{fontFamily:FEN}}>{e.wrong}</span>{" → "}<span className="hl-green" style={{fontFamily:FEN}}>{e.right}</span><br/><span style={{color:C.inkSoft,fontSize:13}}>{e.why_es}</span></p>))}
       {fb.natural_en&&<div style={{margin:"8px 0 0"}}><span style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Versión natural</span><div style={{marginTop:4,padding:"8px 12px",background:C.blueSoft,borderRadius:10,fontFamily:FEN,fontSize:16,color:C.ink,borderLeft:`3px solid ${C.blue}`}}>{fb.natural_en}</div></div>}
       {fb.tip_es&&<p style={{margin:"8px 0 0",fontSize:13,color:C.blue}}>💡 {fb.tip_es}</p>}
+      {collapsed&&<button onClick={()=>setOpen(false)} style={{marginTop:8,border:"none",background:"transparent",color:C.inkSoft,fontSize:11.5,textDecoration:"underline dotted",padding:0}}>− ocultar</button>}
     </div>
   );
 }
