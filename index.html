@@ -930,10 +930,10 @@ function NavIcon({name,solid,size=22}){
 function TabItem({icon,label,active,onClick}){
   return(
     <button onClick={onClick} aria-label={label} aria-current={active?"page":undefined}
-      style={{flex:1,position:"relative",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",gap:3,padding:"12px 2px 6px",border:"none",background:"transparent"}}>
-      {active&&<span aria-hidden="true" style={{position:"absolute",top:2,width:16,height:3,borderRadius:99,background:C.blue}}/>}
-      <span style={{color:active?C.blue:C.inkSoft,display:"flex"}}><NavIcon name={icon} solid={active} size={22}/></span>
-      <span style={{fontSize:10,fontWeight:active?700:500,color:active?C.blue:C.inkSoft,lineHeight:1}}>{label}</span>
+      style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",gap:6,padding:"14px 2px 10px",border:"none",background:"transparent"}}>
+      <span style={{color:active?C.ink:C.inkSoft,display:"flex"}}><NavIcon name={icon} size={22}/></span>
+      <span style={{fontSize:10,fontWeight:active?700:500,color:active?C.ink:C.inkSoft,lineHeight:1}}>{label}</span>
+      <span aria-hidden="true" style={{width:active?16:0,height:3,borderRadius:99,background:C.blue,opacity:active?1:0,transition:"width .2s ease, opacity .2s ease"}}/>
     </button>
   );
 }
@@ -946,13 +946,15 @@ function TabItem({icon,label,active,onClick}){
 function CenterFAB({label,active,onClick}){
   const FAB_ACCENT=C.blue;
   return(
-    <div style={{position:"relative",flex:"0 0 auto",width:72,display:"flex",flexDirection:"column",alignItems:"center"}}>
-      <div aria-hidden="true" style={{position:"absolute",top:-42,left:"50%",transform:"translateX(-50%)",width:80,height:80,borderRadius:"50%",background:FAB_ACCENT,filter:"blur(16px)",opacity:0.5,zIndex:0,pointerEvents:"none"}}/>
+    <div style={{position:"relative",flex:"0 0 auto",width:76,display:"flex",flexDirection:"column",alignItems:"center"}}>
+      <div aria-hidden="true" style={{position:"absolute",top:-60,left:"50%",transform:"translateX(-50%)",width:130,height:130,borderRadius:"50%",background:FAB_ACCENT,filter:"blur(30px)",opacity:0.45,zIndex:0,pointerEvents:"none"}}/>
+      <div aria-hidden="true" style={{position:"absolute",top:-46,left:"50%",transform:"translateX(-50%)",width:82,height:82,borderRadius:"50%",background:FAB_ACCENT,filter:"blur(12px)",opacity:0.6,zIndex:0,pointerEvents:"none"}}/>
       <button onClick={onClick} aria-label={label} aria-current={active?"page":undefined}
-        style={{position:"relative",zIndex:1,marginTop:-32,width:58,height:58,borderRadius:"50%",border:`4px solid ${C.card}`,background:`linear-gradient(145deg, ${FAB_ACCENT}, ${FAB_ACCENT}CC)`,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 10px 22px ${FAB_ACCENT}77`}}>
-        <NavIcon name="book" size={23}/>
+        style={{position:"relative",zIndex:1,marginTop:-36,width:60,height:60,borderRadius:"50%",border:"none",background:`linear-gradient(145deg, ${FAB_ACCENT}, ${FAB_ACCENT}CC)`,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 14px 28px ${FAB_ACCENT}66`}}>
+        <NavIcon name="book" size={24}/>
       </button>
-      <span style={{marginTop:5,fontSize:10,fontWeight:active?700:600,color:active?FAB_ACCENT:C.inkSoft,lineHeight:1}}>{label}</span>
+      <span style={{marginTop:9,fontSize:10,fontWeight:active?700:500,color:active?FAB_ACCENT:C.inkSoft,lineHeight:1}}>{label}</span>
+      <span aria-hidden="true" style={{marginTop:4,width:active?16:0,height:3,borderRadius:99,background:FAB_ACCENT,opacity:active?1:0,transition:"width .2s ease, opacity .2s ease"}}/>
     </div>
   );
 }
@@ -965,8 +967,8 @@ function TabBarLayout({tab,setTab}){
   const RIGHT=[{id:"write",icon:"pencil",label:"Escribir"},{id:"settings",icon:"gear",label:"Ajustes"}];
   const vocabActive=tab==="phrases"||tab==="grammar";
   return(
-    <nav style={{position:"fixed",bottom:0,left:0,right:0,display:"flex",justifyContent:"center",zIndex:50,padding:"0 16px calc(14px + env(safe-area-inset-bottom, 0px))",pointerEvents:"none"}}>
-      <div className="elev" style={{pointerEvents:"auto",width:"100%",maxWidth:420,display:"flex",alignItems:"flex-end",justifyContent:"space-between",background:C.card,border:`1px solid ${C.line}`,borderRadius:999,padding:"4px 8px 6px",position:"relative"}}>
+    <nav style={{position:"fixed",bottom:0,left:0,right:0,display:"flex",justifyContent:"center",zIndex:50,padding:"0 12px calc(14px + env(safe-area-inset-bottom, 0px))",pointerEvents:"none"}}>
+      <div className="elev" style={{pointerEvents:"auto",width:"100%",maxWidth:460,display:"flex",alignItems:"flex-end",justifyContent:"space-between",background:C.card,border:`1px solid ${C.line}`,borderRadius:28,padding:"6px 10px 8px",position:"relative"}}>
         <div style={{display:"flex",flex:1}}>
           {LEFT.map(it=><TabItem key={it.id} icon={it.icon} label={it.label} active={tab===it.id} onClick={()=>setTab(it.id)}/>)}
         </div>
