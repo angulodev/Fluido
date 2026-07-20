@@ -2069,117 +2069,329 @@ function listenSave(d){try{sessionStorage.setItem("fluido-listen",JSON.stringify
 function writeLoad(){try{return JSON.parse(sessionStorage.getItem("fluido-write")||"null");}catch(e){return null;}}
 function writeSave(d){try{sessionStorage.setItem("fluido-write",JSON.stringify(d));}catch(e){}}
 
+// ============================================================
+// ESCRIBIR — construcción guiada de oraciones (fórmula + piezas)
+// ============================================================
+const TENSES = [
+  {id:"present_simple", label:"Presente simple", minLevel:"A0"},
+  {id:"present_cont",   label:"Presente continuo", minLevel:"A0"},
+  {id:"past_simple",    label:"Pasado simple", minLevel:"A2"},
+  {id:"future_going",   label:"Futuro (going to)", minLevel:"A2"},
+  {id:"future_will",    label:"Futuro (will)", minLevel:"B1"},
+  {id:"present_perfect",label:"Presente perfecto", minLevel:"B1"},
+];
+const SENTENCE_TYPES = [
+  {id:"afirmativa", label:"Afirmativa"},
+  {id:"negativa",   label:"Negativa"},
+  {id:"pregunta",   label:"Pregunta"},
+];
+function cap1(s){ return s? s.charAt(0).toUpperCase()+s.slice(1) : s; }
+function personForm(subject){
+  const s=(subject||"").trim().toLowerCase();
+  if(s==="i") return {be:"am",doAux:"do",thirdS:false};
+  if(!s) return {be:"is",doAux:"does",thirdS:true};
+  if(["you","we","they"].includes(s) || /s$/.test(s)) return {be:"are",doAux:"do",thirdS:false};
+  return {be:"is",doAux:"does",thirdS:true};
+}
+const FORMULAS = {
+  present_simple:{
+    afirmativa:{
+      parts:[{l:"Sujeto",t:"subject"},{l:"verbo (+s/es si 3ª pers.)",t:"verb"},{l:"complemento",t:"comp"}],
+      example_en:"I go to work. / She goes to work.", example_es:"Yo voy al trabajo. / Ella va al trabajo.",
+      verbHint:"forma base; agrega -s/-es si el sujeto es he/she/it (go→goes, watch→watches)",
+      assemble:(su,ve,co)=>`${su} ${ve} ${co}`.trim()
+    },
+    negativa:{
+      parts:[{l:"Sujeto",t:"subject"},{l:"do/does",t:"aux"},{l:"not",t:"neg"},{l:"verbo base",t:"verb"},{l:"complemento",t:"comp"}],
+      example_en:"I do not like coffee. / She does not like coffee.", example_es:"Yo no tomo café. / Ella no toma café.",
+      verbHint:"siempre en forma base, sin -s (like, no likes)",
+      assemble:(su,ve,co)=>`${su} ${personForm(su).doAux} not ${ve} ${co}`.trim()
+    },
+    pregunta:{
+      parts:[{l:"Do/Does",t:"aux"},{l:"Sujeto",t:"subject"},{l:"verbo base",t:"verb"},{l:"complemento?",t:"comp"}],
+      example_en:"Do you like coffee? / Does she like coffee?", example_es:"¿Te gusta el café? / ¿Le gusta el café a ella?",
+      verbHint:"forma base, sin -s",
+      assemble:(su,ve,co)=>`${cap1(personForm(su).doAux)} ${su} ${ve} ${co}?`.trim()
+    }
+  },
+  present_cont:{
+    afirmativa:{
+      parts:[{l:"Sujeto",t:"subject"},{l:"am/is/are",t:"aux"},{l:"verbo-ing",t:"verb"},{l:"complemento",t:"comp"}],
+      example_en:"I am working. / She is working.", example_es:"Yo estoy trabajando. / Ella está trabajando.",
+      verbHint:"verbo + -ing (work→working, run→running, write→writing)",
+      assemble:(su,ve,co)=>`${su} ${personForm(su).be} ${ve} ${co}`.trim()
+    },
+    negativa:{
+      parts:[{l:"Sujeto",t:"subject"},{l:"am/is/are",t:"aux"},{l:"not",t:"neg"},{l:"verbo-ing",t:"verb"},{l:"complemento",t:"comp"}],
+      example_en:"I am not working. / She is not working.", example_es:"Yo no estoy trabajando. / Ella no está trabajando.",
+      verbHint:"verbo + -ing",
+      assemble:(su,ve,co)=>`${su} ${personForm(su).be} not ${ve} ${co}`.trim()
+    },
+    pregunta:{
+      parts:[{l:"Am/Is/Are",t:"aux"},{l:"Sujeto",t:"subject"},{l:"verbo-ing",t:"verb"},{l:"complemento?",t:"comp"}],
+      example_en:"Are you working? / Is she working?", example_es:"¿Estás trabajando? / ¿Está ella trabajando?",
+      verbHint:"verbo + -ing",
+      assemble:(su,ve,co)=>`${cap1(personForm(su).be)} ${su} ${ve} ${co}?`.trim()
+    }
+  },
+  past_simple:{
+    afirmativa:{
+      parts:[{l:"Sujeto",t:"subject"},{l:"verbo en pasado",t:"verb"},{l:"complemento",t:"comp"}],
+      example_en:"I went to the party. / She played tennis.", example_es:"Yo fui a la fiesta. / Ella jugó tenis.",
+      verbHint:"en pasado: regular +ed (played) o irregular (went, ate, saw…)",
+      assemble:(su,ve,co)=>`${su} ${ve} ${co}`.trim()
+    },
+    negativa:{
+      parts:[{l:"Sujeto",t:"subject"},{l:"did",t:"aux"},{l:"not",t:"neg"},{l:"verbo base",t:"verb"},{l:"complemento",t:"comp"}],
+      example_en:"I did not go to the party.", example_es:"Yo no fui a la fiesta.",
+      verbHint:"forma base (después de did, sin -ed): go, no went",
+      assemble:(su,ve,co)=>`${su} did not ${ve} ${co}`.trim()
+    },
+    pregunta:{
+      parts:[{l:"Did",t:"aux"},{l:"Sujeto",t:"subject"},{l:"verbo base",t:"verb"},{l:"complemento?",t:"comp"}],
+      example_en:"Did you go to the party?", example_es:"¿Fuiste a la fiesta?",
+      verbHint:"forma base",
+      assemble:(su,ve,co)=>`Did ${su} ${ve} ${co}?`.trim()
+    }
+  },
+  future_going:{
+    afirmativa:{
+      parts:[{l:"Sujeto",t:"subject"},{l:"am/is/are",t:"aux"},{l:"going to",t:"aux"},{l:"verbo base",t:"verb"},{l:"complemento",t:"comp"}],
+      example_en:"I am going to travel next year.", example_es:"Voy a viajar el año que viene.",
+      verbHint:"forma base",
+      assemble:(su,ve,co)=>`${su} ${personForm(su).be} going to ${ve} ${co}`.trim()
+    },
+    negativa:{
+      parts:[{l:"Sujeto",t:"subject"},{l:"am/is/are",t:"aux"},{l:"not",t:"neg"},{l:"going to",t:"aux"},{l:"verbo base",t:"verb"},{l:"complemento",t:"comp"}],
+      example_en:"I am not going to travel next year.", example_es:"No voy a viajar el año que viene.",
+      verbHint:"forma base",
+      assemble:(su,ve,co)=>`${su} ${personForm(su).be} not going to ${ve} ${co}`.trim()
+    },
+    pregunta:{
+      parts:[{l:"Am/Is/Are",t:"aux"},{l:"Sujeto",t:"subject"},{l:"going to",t:"aux"},{l:"verbo base",t:"verb"},{l:"complemento?",t:"comp"}],
+      example_en:"Are you going to travel next year?", example_es:"¿Vas a viajar el año que viene?",
+      verbHint:"forma base",
+      assemble:(su,ve,co)=>`${cap1(personForm(su).be)} ${su} going to ${ve} ${co}?`.trim()
+    }
+  },
+  future_will:{
+    afirmativa:{
+      parts:[{l:"Sujeto",t:"subject"},{l:"will",t:"aux"},{l:"verbo base",t:"verb"},{l:"complemento",t:"comp"}],
+      example_en:"I will call you tomorrow.", example_es:"Te llamaré mañana.",
+      verbHint:"forma base",
+      assemble:(su,ve,co)=>`${su} will ${ve} ${co}`.trim()
+    },
+    negativa:{
+      parts:[{l:"Sujeto",t:"subject"},{l:"will not / won't",t:"neg"},{l:"verbo base",t:"verb"},{l:"complemento",t:"comp"}],
+      example_en:"I will not (won't) call you tomorrow.", example_es:"No te llamaré mañana.",
+      verbHint:"forma base",
+      assemble:(su,ve,co)=>`${su} will not ${ve} ${co}`.trim()
+    },
+    pregunta:{
+      parts:[{l:"Will",t:"aux"},{l:"Sujeto",t:"subject"},{l:"verbo base",t:"verb"},{l:"complemento?",t:"comp"}],
+      example_en:"Will you call me tomorrow?", example_es:"¿Me llamarás mañana?",
+      verbHint:"forma base",
+      assemble:(su,ve,co)=>`Will ${su} ${ve} ${co}?`.trim()
+    }
+  },
+  present_perfect:{
+    afirmativa:{
+      parts:[{l:"Sujeto",t:"subject"},{l:"have/has",t:"aux"},{l:"verbo en participio",t:"verb"},{l:"complemento",t:"comp"}],
+      example_en:"I have finished the report. / She has finished the report.", example_es:"He terminado el informe. / Ella ha terminado el informe.",
+      verbHint:"participio pasado: regular +ed (finished) o irregular (done, seen, written…)",
+      assemble:(su,ve,co)=>`${su} ${personForm(su).thirdS?"has":"have"} ${ve} ${co}`.trim()
+    },
+    negativa:{
+      parts:[{l:"Sujeto",t:"subject"},{l:"have/has",t:"aux"},{l:"not",t:"neg"},{l:"verbo en participio",t:"verb"},{l:"complemento",t:"comp"}],
+      example_en:"I have not finished the report.", example_es:"No he terminado el informe.",
+      verbHint:"participio pasado",
+      assemble:(su,ve,co)=>`${su} ${personForm(su).thirdS?"has":"have"} not ${ve} ${co}`.trim()
+    },
+    pregunta:{
+      parts:[{l:"Have/Has",t:"aux"},{l:"Sujeto",t:"subject"},{l:"verbo en participio",t:"verb"},{l:"complemento?",t:"comp"}],
+      example_en:"Have you finished the report?", example_es:"¿Has terminado el informe?",
+      verbHint:"participio pasado",
+      assemble:(su,ve,co)=>`${cap1(personForm(su).thirdS?"has":"have")} ${su} ${ve} ${co}?`.trim()
+    }
+  }
+};
+const _slotSuggestCache={};
+async function fetchSlotSuggestions(scenarioEs,level,piece,tenseLabel,typeLabel,verbHint){
+  const key=[scenarioEs,level,piece,tenseLabel,typeLabel].join("|");
+  if(_slotSuggestCache[key]) return _slotSuggestCache[key];
+  try{
+    const pieceNote = piece==="Verbo" ? ` La forma del verbo debe ser: ${verbHint}.` : "";
+    const data=await askAI_JSON(
+      `Nivel: ${level}. Escenario: "${scenarioEs}". El alumno va a construir una oración en ${tenseLabel}, forma ${typeLabel}, y necesita opciones breves en inglés para la parte "${piece}" de la oración.${pieceNote} Da 5 opciones simples y relevantes al escenario.\n\nDevuelve SOLO JSON: {"options":[{"en":"...","es":"..."}]}`,
+      "Eres un profesor de inglés que sugiere vocabulario simple, relevante y correcto.");
+    _slotSuggestCache[key]=data.options||[];
+    return _slotSuggestCache[key];
+  }catch(e){ return []; }
+}
+function ChipRow({options,value,onChange}){
+  return(
+    <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+      {options.map(o=>(
+        <button key={o.id} onClick={()=>onChange(o.id)}
+          style={{padding:"8px 13px",borderRadius:999,border:`1.5px solid ${value===o.id?C.blue:C.line}`,background:value===o.id?C.blueSoft:C.card,color:value===o.id?C.blue:C.ink,fontWeight:600,fontSize:13}}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+function FormulaPill({part}){
+  const colorMap={subject:C.blue,aux:C.green,neg:C.coral,verb:C.ink,comp:C.inkSoft};
+  const bgMap={subject:C.blueSoft,aux:C.greenSoft,neg:C.coralSoft,verb:C.line,comp:C.card};
+  return(
+    <span style={{display:"inline-block",padding:"4px 10px",borderRadius:8,background:bgMap[part.t]||C.card,color:colorMap[part.t]||C.ink,fontWeight:700,fontSize:12.5,fontFamily:FUI}}>
+      {part.l}
+    </span>
+  );
+}
+function FormulaCard({tenseId,typeId}){
+  const f=FORMULAS[tenseId][typeId];
+  return(
+    <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:14,padding:14,marginBottom:14}}>
+      <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,marginBottom:10}}>
+        {f.parts.map((p,i)=>(
+          <React.Fragment key={i}>
+            <FormulaPill part={p}/>
+            {i<f.parts.length-1&&<span style={{color:C.inkSoft,fontSize:13}}>+</span>}
+          </React.Fragment>
+        ))}
+      </div>
+      <p style={{fontFamily:FEN,fontSize:14.5,color:C.ink,margin:"0 0 3px"}}>{f.example_en}</p>
+      <p style={{fontSize:12.5,color:C.inkSoft,fontStyle:"italic",margin:0}}>{f.example_es}</p>
+    </div>
+  );
+}
+function SlotInput({label,placeholder,value,onChange,hint,onSuggest,loadingSuggest,suggestions}){
+  return(
+    <div style={{marginBottom:12}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+        <label style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700}}>{label}</label>
+        <button onClick={onSuggest} disabled={loadingSuggest}
+          style={{border:"none",background:"transparent",color:C.blue,fontSize:12,fontWeight:600,padding:0}}>
+          {loadingSuggest?"…":"💡 ideas"}
+        </button>
+      </div>
+      <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+        style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${C.line}`,background:C.paper,color:C.ink,fontFamily:FEN,fontSize:16}}/>
+      {hint&&<p style={{fontSize:11,color:C.inkSoft,margin:"3px 0 0"}}>{hint}</p>}
+      {suggestions&&suggestions.length>0&&(
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6}}>
+          {suggestions.map((s,i)=>(
+            <button key={i} onClick={()=>onChange(s.en)}
+              style={{padding:"5px 10px",borderRadius:999,border:`1px solid ${C.line}`,background:C.card,color:C.ink,fontSize:12}}>
+              {s.en}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 function Write({state,registerActivity}){
   const sv=writeLoad();
   const [prompt,setPrompt]=useState(sv?.prompt||null);
-  const [text,setText]=useState(sv?.text||"");
+  const [sentenceType,setSentenceType]=useState(sv?.sentenceType||"afirmativa");
+  const [tense,setTense]=useState(sv?.tense||"present_simple");
+  const [subject,setSubject]=useState(sv?.subject||"");
+  const [verb,setVerb]=useState(sv?.verb||"");
+  const [comp,setComp]=useState(sv?.comp||"");
+  const [manualMode,setManualMode]=useState(false);
+  const [manualText,setManualText]=useState("");
   const [feedback,setFeedback]=useState(sv?.feedback||null);
-  const [thread,setThread]=useState(sv?.thread||[]); // [{question_en,question_es, answer, feedback}]
   const [loadingPrompt,setLoadingPrompt]=useState(false);
   const [loadingReview,setLoadingReview]=useState(false);
-  const [loadingFollowup,setLoadingFollowup]=useState(false);
   const [error,setError]=useState(null);
+  const [suggestions,setSuggestions]=useState({});
+  const [loadingSuggest,setLoadingSuggest]=useState({});
+  const [sheet,setSheet]=useState(null);
   const {speak}=useSpeech();
 
-  useEffect(()=>{ writeSave({prompt,text,feedback,thread}); },[prompt,text,feedback,thread]);
+  const levelIdx=id=>LEVELS.findIndex(l=>l.id===id);
+  const availableTenses=TENSES.filter(t=>levelIdx(t.minLevel)<=levelIdx(state.level));
+  const activeTense=availableTenses.some(t=>t.id===tense)?tense:(availableTenses[0]?.id||"present_simple");
+  const formula=FORMULAS[activeTense][sentenceType];
 
-  const [sheet,setSheet]=useState(null);
-  const buildSheet=()=>{
-    const items=[];
-    if(feedback&&feedback.corrected) items.push({head:feedback.corrected,sub:prompt?prompt.prompt_es:"",note:"✅ Versión corregida"});
-    ((feedback&&feedback.errors)||[]).forEach(e=>items.push({head:e.fix,sub:"en vez de: "+e.original,note:e.why_es}));
-    thread.forEach(t=>{
-      if(t.feedback){
-        items.push({head:t.feedback.corrected,sub:t.question_en,note:"✅ Versión corregida"});
-        (t.feedback.errors||[]).forEach(e=>items.push({head:e.fix,sub:"en vez de: "+e.original,note:e.why_es}));
-      }
-    });
-    return items;
-  };
+  useEffect(()=>{ writeSave({prompt,sentenceType,tense:activeTense,subject,verb,comp,feedback}); },[prompt,sentenceType,activeTense,subject,verb,comp,feedback]);
+
+  const resetPieces=()=>{setSubject("");setVerb("");setComp("");setManualMode(false);setManualText("");setFeedback(null);setSuggestions({});setError(null);};
+
   const newPrompt=async(topic)=>{
-    setLoadingPrompt(true);setError(null);setFeedback(null);setText("");setThread([]);
+    setLoadingPrompt(true);setError(null);setPrompt(null);resetPieces();
     try{
       const topicLine=topic?`TEMA OBLIGATORIO de la consigna: ${topic}. `:"Debe pedir escribir sobre un tema cotidiano relacionado a sus intereses u objetivos. ";
       const data=await askAI_JSON(
-        `Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera UNA consigna breve de escritura en inglés para este perfil, ajustada EXACTAMENTE a la complejidad del nivel indicado. ${topicLine}Debe pedir escribir 1-3 frases. Varía el enfoque (semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve SOLO JSON: {"prompt_es":"consigna en español, breve y clara","example_hint_es":"pista corta opcional de qué incluir"}`,
-        "Eres un profesor de inglés que diseña consignas de escritura cortas y motivadoras."
+        `Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera UNA consigna breve para practicar la construcción de UNA oración en inglés (no un párrafo), ajustada EXACTAMENTE a la complejidad del nivel indicado. ${topicLine}La consigna debe describir una situación comunicativa concreta donde el alumno necesite expresar UNA idea (ej: contarle a alguien un plan, pedir algo, describir una rutina, negar algo, preguntar algo). Varía el enfoque (semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve SOLO JSON: {"prompt_es":"consigna en español, breve y clara","example_hint_es":"pista corta opcional de qué incluir"}`,
+        "Eres un profesor de inglés que diseña consignas breves para practicar construcción de oraciones."
       );
       setPrompt(data);
-    }catch(e){setError(e.userMsg||"No pude generar una consigna. Intenta de nuevo.");}
+    }catch(e){setError(e.userMsg||"No pude generar un escenario. Intenta de nuevo.");}
     setLoadingPrompt(false);
   };
 
+  const suggestFor=async(piece)=>{
+    if(!prompt) return;
+    setLoadingSuggest(s=>({...s,[piece]:true}));
+    const tenseLabel=TENSES.find(t=>t.id===activeTense)?.label||activeTense;
+    const typeLabel=SENTENCE_TYPES.find(t=>t.id===sentenceType)?.label||sentenceType;
+    const opts=await fetchSlotSuggestions(prompt.prompt_es,state.level,piece,tenseLabel,typeLabel,formula.verbHint);
+    setSuggestions(s=>({...s,[piece]:opts}));
+    setLoadingSuggest(s=>({...s,[piece]:false}));
+  };
+
+  const finalSentence=()=>{
+    if(manualMode) return manualText.trim();
+    if(!subject.trim()||!verb.trim()) return "";
+    return cap1(formula.assemble(subject.trim(),verb.trim(),comp.trim()));
+  };
+
+  const enableManual=()=>{ setManualText(finalSentence()||""); setManualMode(true); };
+
   const submit=async()=>{
-    if(!text.trim())return;
+    const sentence=finalSentence();
+    if(!sentence)return;
     setLoadingReview(true);setError(null);
     try{
       const lvl=state.level;
+      const tenseLabel=TENSES.find(t=>t.id===activeTense)?.label||activeTense;
+      const typeLabel=SENTENCE_TYPES.find(t=>t.id===sentenceType)?.label||sentenceType;
       const data=await askAI_JSON(
-        `Nivel del alumno: ${lvl}. Consigna que se le dio: "${prompt?.prompt_es||""}". Esto es lo que escribió en inglés:\n"""${text.trim()}"""\n\nCorrige su texto. Sé constructivo y específico, acorde al nivel ${lvl} (no exijas perfección de nivel C1 a un A2). Devuelve SOLO JSON: {"corrected":"versión corregida natural en inglés","errors":[{"original":"fragmento que escribió","fix":"cómo debería decirse","why_es":"explicación breve en español"}],"praise_es":"algo breve que hizo bien","score":"excelente|bien|sigue practicando"}`,
-        "Eres un profesor de inglés que corrige textos de alumnos con tono alentador y explicaciones claras en español."
+        `Nivel del alumno: ${lvl}. Consigna: "${prompt?.prompt_es||""}". El alumno está practicando la ESTRUCTURA: ${typeLabel} en ${tenseLabel}. Esto es lo que armó en inglés:\n"""${sentence}"""\n\nCorrige la oración. Sé constructivo y específico, acorde al nivel ${lvl}. Evalúa también si respetó la estructura objetivo (${typeLabel}, ${tenseLabel}): si NO la respetó bien, explica brevemente qué falló en "structure_note_es" (o null si la respetó bien). Devuelve SOLO JSON: {"corrected":"versión corregida natural en inglés","errors":[{"original":"fragmento","fix":"corrección","why_es":"explicación breve en español"}],"praise_es":"algo breve que hizo bien","structure_ok":true,"structure_note_es":"explicación breve o null"}`,
+        "Eres un profesor de inglés que corrige oraciones y evalúa si el alumno aplicó bien la estructura gramatical pedida, con tono alentador."
       );
-      setFeedback(data);
-      if(data.corrected) sesNote("✍️ Escribir",{head:data.corrected,sub:prompt?prompt.prompt_es:"",note:"Versión corregida"});
+      setFeedback({...data,sentence,tenseLabel,typeLabel});
+      if(data.corrected) sesNote("✍️ Escribir",{head:data.corrected,sub:prompt?prompt.prompt_es:"",note:`${typeLabel} · ${tenseLabel}`});
       (data.errors||[]).slice(0,5).forEach(e=>sesNote("✍️ Escribir",{head:e.fix,sub:"en vez de: "+e.original,note:e.why_es}));
       recordPerf("write", lvl, !(data.errors&&data.errors.length>0));
       registerActivity("write");
-    }catch(e){setError(e.userMsg||"No pude revisar tu texto. Intenta de nuevo.");}
+    }catch(e){setError(e.userMsg||"No pude revisar tu oración. Intenta de nuevo.");}
     setLoadingReview(false);
   };
 
-  const tryAgain=()=>{setText("");setFeedback(null);setThread([]);};
-
-  const threadContext=()=>{
-    let ctx=`Consigna original: "${prompt?.prompt_es||""}". Primera respuesta del alumno (ya corregida): "${feedback?.corrected||text}".`;
-    thread.forEach((t,i)=>{ ctx+=`\nPregunta de seguimiento ${i+1}: "${t.question_en}". Respuesta del alumno: "${t.answer}".`; });
-    return ctx;
-  };
-
-  const askFollowup=async()=>{
-    setLoadingFollowup(true);setError(null);
-    try{
-      const data=await askAI_JSON(
-        `Nivel del alumno: ${state.level}. ${threadContext()}\n\nHaz UNA pregunta de seguimiento breve en inglés, simple y natural acorde al nivel ${state.level}, relacionada al mismo tema, para que el alumno siga practicando escritura sobre lo que ya contó. No repitas preguntas anteriores.\n\nDevuelve SOLO JSON: {"question_en":"pregunta en inglés","question_es":"misma pregunta traducida al español"}`,
-        "Eres un profesor de inglés que mantiene una conversación escrita breve y motivadora con su alumno."
-      );
-      setThread(th=>[...th,{question_en:data.question_en,question_es:data.question_es,answer:"",feedback:null}]);
-    }catch(e){setError(e.userMsg||"No pude generar la siguiente pregunta. Intenta de nuevo.");}
-    setLoadingFollowup(false);
-  };
-
-  const updateThreadAnswer=(idx,val)=>{
-    setThread(th=>th.map((t,i)=>i===idx?{...t,answer:val}:t));
-  };
-
-  const submitThreadAnswer=async(idx)=>{
-    const turn=thread[idx];
-    if(!turn.answer.trim())return;
-    setLoadingReview(true);setError(null);
-    try{
-      const data=await askAI_JSON(
-        `Nivel del alumno: ${state.level}. Se le hizo esta pregunta en inglés: "${turn.question_en}". Esto es lo que respondió:\n"""${turn.answer.trim()}"""\n\nCorrige su respuesta. Sé constructivo y específico, acorde al nivel ${state.level}. Devuelve SOLO JSON: {"corrected":"versión corregida natural en inglés","errors":[{"original":"fragmento","fix":"corrección","why_es":"explicación breve en español"}],"praise_es":"algo breve que hizo bien"}`,
-        "Eres un profesor de inglés que corrige textos de alumnos con tono alentador y explicaciones claras en español."
-      );
-      setThread(th=>th.map((t,i)=>i===idx?{...t,feedback:data}:t));
-      recordPerf("write", state.level, !(data.errors&&data.errors.length>0));
-      registerActivity("write");
-    }catch(e){setError(e.userMsg||"No pude revisar tu respuesta. Intenta de nuevo.");}
-    setLoadingReview(false);
+  const buildSheet=()=>{
+    const items=[];
+    if(feedback&&feedback.corrected) items.push({head:feedback.corrected,sub:prompt?prompt.prompt_es:"",note:`✅ ${feedback.typeLabel||""} · ${feedback.tenseLabel||""}`});
+    ((feedback&&feedback.errors)||[]).forEach(e=>items.push({head:e.fix,sub:"en vez de: "+e.original,note:e.why_es}));
+    return items;
   };
 
   return(
     <div>
       <h2 style={{fontSize:26,fontWeight:800,marginBottom:4}}>Escribir</h2>
-      <p style={{fontSize:14,color:C.inkSoft,marginBottom:12}}>Escribe tú en inglés y recibe corrección al instante.</p>
+      <p style={{fontSize:14,color:C.inkSoft,marginBottom:12}}>Aprende la fórmula, arma tu oración pieza por pieza y recibe corrección.</p>
       <ModuleInfo id="write" points={[
-        ["✍️",<>Es tu <strong>taller de escritura con profesor</strong>: recibes una consigna a tu nivel (o sobre tus temas) y escribes con calma.</>],
-        ["🔍",<>Entrena tu <strong>precisión</strong>: versión corregida completa + cada error desglosado con su explicación en español. Aquí el error se estudia, no se pasa por alto.</>],
-        ["📋",<>Puedes continuar con preguntas de seguimiento y al final crear tu <strong>cheat sheet</strong> con todo lo aprendido, listo para compartir o guardar.</>]
+        ["🧩",<>Es tu <strong>taller de construcción de oraciones</strong>: eliges tipo (afirmativa/negativa/pregunta) y tiempo verbal, ves la fórmula, y armas tu oración pieza por pieza.</>],
+        ["🔍",<>Entrena tu <strong>precisión gramatical</strong>: cada pieza tiene su función, y al final recibes corrección + si respetaste la estructura pedida.</>],
+        ["🔁",<>Puedes repetir el mismo escenario con <strong>otra estructura</strong> para practicar cómo cambia la oración según el tiempo verbal.</>]
       ]}/>
 
       {!prompt&&!loadingPrompt&&(
         <div>
-          <BigButton onClick={()=>newPrompt()}>✨ Pedir una consigna</BigButton>
+          <BigButton onClick={()=>newPrompt()}>✨ Pedir un escenario</BigButton>
           {(()=>{const pt=loadPersonalTopics().topics;if(!pt.length)return null;return(
             <div style={{marginTop:14}}>
               <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"0 0 8px"}}>✨ O escribe sobre tus temas</p>
@@ -2187,45 +2399,77 @@ function Write({state,registerActivity}){
             </div>);})()}
         </div>
       )}
-      {loadingPrompt&&<p style={{fontSize:14,color:C.inkSoft}}>Pensando una consigna…</p>}
+      {loadingPrompt&&<p style={{fontSize:14,color:C.inkSoft}}>Pensando un escenario…</p>}
       {error&&<p style={{fontSize:14,color:C.coral,marginTop:8}}>{error}</p>}
 
       {prompt&&(
         <div className="fadein" style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:18,padding:20}}>
-          <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,marginBottom:6}}>Consigna</p>
+          <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,marginBottom:6}}>Escenario</p>
           <p style={{fontSize:18,fontWeight:700,marginBottom:prompt.example_hint_es?4:14}}>{prompt.prompt_es}</p>
           {prompt.example_hint_es&&<p style={{fontSize:13,color:C.inkSoft,fontStyle:"italic",marginBottom:14}}>💡 {prompt.example_hint_es}</p>}
 
           {!feedback?(
             <>
-              <textarea value={text} onChange={e=>setText(e.target.value)}
-                placeholder="Write your answer in English…"
-                disabled={loadingReview}
-                style={{width:"100%",minHeight:100,padding:"12px 14px",borderRadius:12,border:`1.5px solid ${C.line}`,background:C.bg,color:C.ink,fontFamily:"Newsreader,Georgia,serif",fontSize:16,lineHeight:1.5,resize:"vertical"}}/>
+              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:6}}>Tipo de oración</p>
+              <ChipRow options={SENTENCE_TYPES} value={sentenceType} onChange={v=>{setSentenceType(v);resetPieces();}}/>
+
+              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,margin:"14px 0 6px"}}>Tiempo verbal</p>
+              <ChipRow options={availableTenses} value={activeTense} onChange={v=>{setTense(v);resetPieces();}}/>
+
+              <div style={{marginTop:14}}>
+                <FormulaCard tenseId={activeTense} typeId={sentenceType}/>
+              </div>
+
+              <SlotInput label="Sujeto" placeholder="I / She / The team…" value={subject} onChange={setSubject}
+                onSuggest={()=>suggestFor("Sujeto")} loadingSuggest={!!loadingSuggest.Sujeto} suggestions={suggestions.Sujeto}/>
+              <SlotInput label="Verbo" placeholder="go / like / work…" value={verb} onChange={setVerb} hint={formula.verbHint}
+                onSuggest={()=>suggestFor("Verbo")} loadingSuggest={!!loadingSuggest.Verbo} suggestions={suggestions.Verbo}/>
+              <SlotInput label="Complemento" placeholder="to work / a new car / tomorrow…" value={comp} onChange={setComp}
+                onSuggest={()=>suggestFor("Complemento")} loadingSuggest={!!loadingSuggest.Complemento} suggestions={suggestions.Complemento}/>
+
+              <div style={{marginTop:6,marginBottom:14}}>
+                <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:6}}>Tu oración</p>
+                {manualMode?(
+                  <textarea value={manualText} onChange={e=>setManualText(e.target.value)} rows={2}
+                    style={{width:"100%",padding:"12px 14px",borderRadius:12,border:`1.5px solid ${C.blue}`,background:C.paper,color:C.ink,fontFamily:FEN,fontSize:16,lineHeight:1.5,resize:"vertical"}}/>
+                ):(
+                  <div style={{padding:"12px 14px",borderRadius:12,border:`1.5px dashed ${C.line}`,background:C.paper,minHeight:24}}>
+                    <p style={{margin:0,fontFamily:FEN,fontSize:16,color:finalSentence()?C.ink:C.inkSoft,lineHeight:1.5}}>
+                      {finalSentence()||"Completa sujeto y verbo para ver tu oración…"}
+                    </p>
+                  </div>
+                )}
+                {!manualMode&&<button onClick={enableManual} style={{marginTop:6,border:"none",background:"transparent",color:C.blue,fontSize:12,fontWeight:600,padding:0,textDecoration:"underline"}}>✏️ Ajustar manualmente</button>}
+              </div>
+
               <div style={{display:"flex",gap:8,marginTop:10}}>
                 <button onClick={()=>newPrompt()} disabled={loadingReview}
                   style={{padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:600,fontSize:13}}>
-                  Cambiar consigna
+                  Cambiar escenario
                 </button>
-                <button onClick={submit} disabled={loadingReview||!text.trim()}
-                  style={{flex:1,padding:"10px 14px",borderRadius:10,border:"none",background:C.blue,color:"#fff",fontWeight:700,fontSize:14,opacity:(loadingReview||!text.trim())?0.6:1}}>
+                <button onClick={submit} disabled={loadingReview||!finalSentence()}
+                  style={{flex:1,padding:"10px 14px",borderRadius:10,border:"none",background:C.blue,color:"#fff",fontWeight:700,fontSize:14,opacity:(loadingReview||!finalSentence())?0.6:1}}>
                   {loadingReview?"Revisando…":"Corregir"}
                 </button>
               </div>
             </>
           ):(
             <div className="fadein">
-              <div style={{background:C.bg,borderRadius:12,padding:"10px 14px",marginBottom:10}}>
-                <p style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Lo que escribiste</p>
-                <p style={{fontFamily:"Newsreader,Georgia,serif",fontSize:15,color:C.inkSoft,lineHeight:1.5}}>{text}</p>
+              <div style={{background:C.paper,borderRadius:12,padding:"10px 14px",marginBottom:10}}>
+                <p style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Tu oración ({feedback.typeLabel} · {feedback.tenseLabel})</p>
+                <p style={{fontFamily:FEN,fontSize:15,color:C.inkSoft,lineHeight:1.5}}>{feedback.sentence}</p>
               </div>
               <div style={{background:C.greenSoft,borderRadius:12,padding:"10px 14px",marginBottom:12}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
                   <p style={{fontSize:11,color:C.green,textTransform:"uppercase",letterSpacing:1,marginBottom:4,fontWeight:700}}>Versión corregida</p>
                   <button onClick={()=>speak(feedback.corrected)} aria-label="Escuchar" style={{border:"none",background:"transparent",fontSize:17}}>🔊</button>
                 </div>
-                <p style={{fontFamily:"Newsreader,Georgia,serif",fontSize:16,fontWeight:600,color:C.ink,lineHeight:1.5}}>{feedback.corrected}</p>
+                <SmartText text={feedback.corrected} style={{fontFamily:FEN,fontSize:16,fontWeight:600,color:C.ink,lineHeight:1.5}}/>
               </div>
+
+              {feedback.structure_note_es?(
+                <p style={{fontSize:13,color:C.coral,marginBottom:10}}>🧩 {feedback.structure_note_es}</p>
+              ):(feedback.structure_ok&&<p style={{fontSize:13,color:C.green,marginBottom:10}}>🧩 Buena aplicación de la estructura {(feedback.typeLabel||"").toLowerCase()} en {(feedback.tenseLabel||"").toLowerCase()}.</p>)}
 
               {feedback.praise_es&&<p style={{fontSize:13,color:C.green,marginBottom:10}}>👍 {feedback.praise_es}</p>}
 
@@ -2233,7 +2477,7 @@ function Write({state,registerActivity}){
                 <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
                   {feedback.errors.map((er,i)=>(
                     <div key={i} style={{borderLeft:`3px solid ${C.coral}`,paddingLeft:10}}>
-                      <p style={{fontSize:13,margin:0}}><span style={{textDecoration:"line-through",color:C.inkSoft}}>{er.original}</span> → <strong style={{color:C.ink}}>{er.fix}</strong></p>
+                      <p style={{fontSize:13,margin:0}}><span style={{textDecoration:"line-through",color:C.inkSoft}}>{er.original}</span> → <strong style={{color:C.ink}}>{withContractions(er.fix)}</strong></p>
                       <p style={{fontSize:12,color:C.inkSoft,margin:"2px 0 0"}}>{er.why_es}</p>
                     </div>
                   ))}
@@ -2243,66 +2487,14 @@ function Write({state,registerActivity}){
                 <p style={{fontSize:13,color:C.inkSoft,marginBottom:14}}>Sin errores que corregir — ¡buen trabajo!</p>
               )}
 
-              {/* --- HILO DE SEGUIMIENTO --- */}
-              {thread.map((t,idx)=>(
-                <div key={idx} className="fadein" style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
-                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:8}}>
-                    <div>
-                      <p style={{fontSize:11,color:C.blue,textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:2}}>Te preguntan</p>
-                      <p style={{fontFamily:"Newsreader,Georgia,serif",fontSize:16,fontWeight:600}}>{t.question_en}</p>
-                      <p style={{fontSize:12,color:C.inkSoft,fontStyle:"italic"}}>{t.question_es}</p>
-                    </div>
-                    <button onClick={()=>speak(t.question_en)} aria-label="Escuchar" style={{border:"none",background:"transparent",fontSize:17,flexShrink:0}}>🔊</button>
-                  </div>
-
-                  {!t.feedback?(
-                    <>
-                      <textarea value={t.answer} onChange={e=>updateThreadAnswer(idx,e.target.value)}
-                        placeholder="Your answer…" disabled={loadingReview}
-                        style={{width:"100%",minHeight:70,padding:"12px 14px",borderRadius:12,border:`1.5px solid ${C.line}`,background:C.bg,color:C.ink,fontFamily:"Newsreader,Georgia,serif",fontSize:16,lineHeight:1.5,resize:"vertical"}}/>
-                      <button onClick={()=>submitThreadAnswer(idx)} disabled={loadingReview||!t.answer.trim()}
-                        style={{width:"100%",marginTop:8,padding:"10px 14px",borderRadius:10,border:"none",background:C.blue,color:"#fff",fontWeight:700,fontSize:14,opacity:(loadingReview||!t.answer.trim())?0.6:1}}>
-                        {loadingReview?"Revisando…":"Corregir"}
-                      </button>
-                    </>
-                  ):(
-                    <>
-                      <div style={{background:C.greenSoft,borderRadius:12,padding:"10px 14px",marginBottom:8}}>
-                        <p style={{fontSize:11,color:C.green,textTransform:"uppercase",letterSpacing:1,marginBottom:4,fontWeight:700}}>Versión corregida</p>
-                        <p style={{fontFamily:"Newsreader,Georgia,serif",fontSize:15,fontWeight:600,color:C.ink,lineHeight:1.5}}>{t.feedback.corrected}</p>
-                      </div>
-                      {t.feedback.praise_es&&<p style={{fontSize:13,color:C.green,marginBottom:8}}>👍 {t.feedback.praise_es}</p>}
-                      {t.feedback.errors&&t.feedback.errors.length>0&&(
-                        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                          {t.feedback.errors.map((er,i)=>(
-                            <div key={i} style={{borderLeft:`3px solid ${C.coral}`,paddingLeft:10}}>
-                              <p style={{fontSize:13,margin:0}}><span style={{textDecoration:"line-through",color:C.inkSoft}}>{er.original}</span> → <strong style={{color:C.ink}}>{er.fix}</strong></p>
-                              <p style={{fontSize:12,color:C.inkSoft,margin:"2px 0 0"}}>{er.why_es}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              ))}
-
               {error&&<p style={{fontSize:13,color:C.coral,marginTop:10}}>{error}</p>}
 
-              {/* Botón continuar conversación: solo si el último turno (o el inicial) ya tiene feedback */}
-              {(thread.length===0||thread[thread.length-1].feedback)&&(
-                <button onClick={askFollowup} disabled={loadingFollowup}
-                  style={{width:"100%",marginTop:14,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.blue}`,background:"transparent",color:C.blue,fontWeight:600,fontSize:13,opacity:loadingFollowup?0.6:1}}>
-                  {loadingFollowup?"Pensando una pregunta…":"💬 Continuar conversación"}
-                </button>
-              )}
-
               <div style={{display:"flex",gap:8,marginTop:8}}>
-                <button onClick={tryAgain} style={{flex:1,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.line}`,background:"transparent",color:C.ink,fontWeight:600,fontSize:13}}>
-                  Escribir otra vez
+                <button onClick={resetPieces} style={{flex:1,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.line}`,background:"transparent",color:C.ink,fontWeight:600,fontSize:13}}>
+                  🔁 Otra estructura
                 </button>
                 <button onClick={()=>newPrompt()} style={{flex:1,padding:"10px 14px",borderRadius:10,border:"none",background:C.blue,color:"#fff",fontWeight:700,fontSize:13}}>
-                  Nueva consigna
+                  Nuevo escenario
                 </button>
               </div>
               <button onClick={()=>setSheet(buildSheet())}
