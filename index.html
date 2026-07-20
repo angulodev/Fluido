@@ -886,14 +886,27 @@ function SideNav({tab,setTab,name,level}){
 function TabBar({tab,setTab,level}){
   const isBasic=level==="A0"||level==="A2";
   const items=[{id:"home",icon:"⌂",label:"Inicio"},{id:"talk",icon:"❝",label:"Conversar"},{id:"phrases",icon:"❏",label:isBasic?"Vocab":"Frases"},{id:"write",icon:"✐",label:"Escribir"},{id:"listen",icon:"♪",label:"Escuchar"},{id:"settings",icon:"⚙",label:"Ajustes"}];
+  const n=items.length;
+  const rawIdx=items.findIndex(it=>tab===it.id||(it.id==="phrases"&&tab==="grammar"));
+  const idx=rawIdx<0?0:rawIdx;
+  const centerPct=(idx+0.5)/n*100;
   return(
     <nav style={{position:"fixed",bottom:0,left:0,right:0,display:"flex",justifyContent:"center",zIndex:50,padding:"0 10px calc(10px + env(safe-area-inset-bottom, 0px))",background:"transparent",pointerEvents:"none"}}>
-      <div className="elev" style={{display:"flex",width:"100%",maxWidth:560,background:C.card,border:`1px solid ${C.line}`,borderRadius:22,padding:"6px 6px",pointerEvents:"auto"}}>
-        {items.map(it=>{const on=(tab===it.id||(it.id==="phrases"&&tab==="grammar"));return(
-          <button key={it.id} onClick={()=>setTab(it.id)} aria-label={it.label}
-            style={{flex:1,padding:"8px 2px",border:"none",background:on?C.blueSoft:"transparent",borderRadius:16,color:on?C.blue:C.inkSoft,fontWeight:on?700:500,fontSize:10,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-            <span style={{fontSize:17,lineHeight:1}}>{it.icon}</span>{it.label}
-          </button>);})}
+      <div style={{position:"relative",width:"100%",maxWidth:560,pointerEvents:"auto"}}>
+        <div className="elev" style={{position:"relative",zIndex:1,display:"flex",width:"100%",background:C.card,border:`1px solid ${C.line}`,borderRadius:22,padding:"6px 6px 5px"}}>
+          {items.map((it,i)=>{const on=i===idx;return(
+            <button key={it.id} onClick={()=>setTab(it.id)} aria-label={it.label} aria-current={on?"page":undefined}
+              style={{flex:1,padding:on?"26px 2px 4px":"8px 2px",border:"none",background:"transparent",borderRadius:16,color:on?C.blue:C.inkSoft,fontWeight:on?700:500,fontSize:10,display:"flex",flexDirection:"column",alignItems:"center",gap:2,transition:"padding .2s ease"}}>
+              {!on&&<span style={{fontSize:17,lineHeight:1}}>{it.icon}</span>}
+              <span>{it.label}</span>
+            </button>);})}
+        </div>
+        {/* "muesca" que funde el borde superior de la barra con el fondo, detrás de la burbuja */}
+        <div aria-hidden="true" style={{position:"absolute",left:`${centerPct}%`,top:-16,width:60,height:38,background:C.paper,borderRadius:"50%",transform:"translateX(-50%)",zIndex:2,transition:"left .3s cubic-bezier(.34,1.56,.64,1)",pointerEvents:"none"}}/>
+        {/* burbuja elevada del tab activo */}
+        <div aria-hidden="true" style={{position:"absolute",left:`${centerPct}%`,top:-19,width:50,height:50,transform:"translateX(-50%)",borderRadius:"50%",background:`linear-gradient(145deg, ${C.blue}, ${C.blue}CC)`,color:"#fff",fontSize:21,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 10px 20px ${C.blue}55`,zIndex:3,transition:"left .3s cubic-bezier(.34,1.56,.64,1)",pointerEvents:"none"}}>
+          {items[idx].icon}
+        </div>
       </div>
     </nav>
   );
