@@ -2281,17 +2281,16 @@ const FORMULAS = {
     }
   }
 };
-const _slotSuggestCache={};
-async function fetchSlotSuggestions(scenarioEs,level,piece,tenseLabel,typeLabel,verbHint){
-  const key=[scenarioEs,level,piece,tenseLabel,typeLabel].join("|");
-  if(_slotSuggestCache[key]) return _slotSuggestCache[key];
+const _sentenceIdeasCache={};
+async function fetchSentenceIdeas(scenarioEs,level,tenseLabel,typeLabel){
+  const key=[scenarioEs,level,tenseLabel,typeLabel].join("|");
+  if(_sentenceIdeasCache[key]) return _sentenceIdeasCache[key];
   try{
-    const pieceNote = piece==="Verbo" ? ` La forma del verbo debe ser: ${verbHint}.` : "";
     const data=await askAI_JSON(
-      `Nivel: ${level}. Escenario: "${scenarioEs}". El alumno va a construir una oración en ${tenseLabel}, forma ${typeLabel}, y necesita opciones breves en inglés para la parte "${piece}" de la oración.${pieceNote} Da 5 opciones simples y relevantes al escenario.\n\nDevuelve SOLO JSON: {"options":[{"en":"...","es":"..."}]}`,
-      "Eres un profesor de inglés que sugiere vocabulario simple, relevante y correcto.");
-    _slotSuggestCache[key]=data.options||[];
-    return _slotSuggestCache[key];
+      `Nivel: ${level}. Escenario: "${scenarioEs}". Da 3 oraciones de EJEMPLO breves en inglés, en ${tenseLabel} (forma ${typeLabel}), relevantes al escenario, que el alumno pueda usar como inspiración para escribir la suya (varía el contenido, no repitas la misma idea con sinónimos).\n\nDevuelve SOLO JSON: {"examples":[{"en":"...","es":"..."}]}`,
+      "Eres un profesor de inglés que da ejemplos breves, claros y variados.");
+    _sentenceIdeasCache[key]=data.examples||[];
+    return _sentenceIdeasCache[key];
   }catch(e){ return []; }
 }
 function ChipRow({options,value,onChange}){
@@ -2315,6 +2314,7 @@ function FormulaPill({part}){
     </span>
   );
 }
+// Guía de referencia: fórmula + ejemplo + nota descriptiva de cómo va el verbo en esta forma.
 function FormulaCard({tenseId,typeId}){
   const f=FORMULAS[tenseId][typeId];
   return(
@@ -2328,33 +2328,8 @@ function FormulaCard({tenseId,typeId}){
         ))}
       </div>
       <p style={{fontFamily:FEN,fontSize:14.5,color:C.ink,margin:"0 0 3px"}}>{f.example_en}</p>
-      <p style={{fontSize:12.5,color:C.inkSoft,fontStyle:"italic",margin:0}}>{f.example_es}</p>
-    </div>
-  );
-}
-function SlotInput({label,placeholder,value,onChange,hint,onSuggest,loadingSuggest,suggestions}){
-  return(
-    <div style={{marginBottom:12}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-        <label style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700}}>{label}</label>
-        <button onClick={onSuggest} disabled={loadingSuggest}
-          style={{border:"none",background:"transparent",color:C.blue,fontSize:12,fontWeight:600,padding:0}}>
-          {loadingSuggest?"…":"💡 ideas"}
-        </button>
-      </div>
-      <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
-        style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${C.line}`,background:C.paper,color:C.ink,fontFamily:FEN,fontSize:16}}/>
-      {hint&&<p style={{fontSize:11,color:C.inkSoft,margin:"3px 0 0"}}>{hint}</p>}
-      {suggestions&&suggestions.length>0&&(
-        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6}}>
-          {suggestions.map((s,i)=>(
-            <button key={i} onClick={()=>onChange(s.en)}
-              style={{padding:"5px 10px",borderRadius:999,border:`1px solid ${C.line}`,background:C.card,color:C.ink,fontSize:12}}>
-              {s.en}
-            </button>
-          ))}
-        </div>
-      )}
+      <p style={{fontSize:12.5,color:C.inkSoft,fontStyle:"italic",margin:"0 0 8px"}}>{f.example_es}</p>
+      {f.verbHint&&<p style={{fontSize:12,color:C.inkSoft,margin:0,borderTop:`1px dashed ${C.line}`,paddingTop:8}}>💡 <strong>Sobre el verbo:</strong> {f.verbHint}</p>}
     </div>
   );
 }
@@ -2363,18 +2338,16 @@ function Write({state,registerActivity}){
   const [prompt,setPrompt]=useState(sv?.prompt||null);
   const [sentenceType,setSentenceType]=useState(sv?.sentenceType||"afirmativa");
   const [tense,setTense]=useState(sv?.tense||"present_simple");
-  const [subject,setSubject]=useState(sv?.subject||"");
-  const [verb,setVerb]=useState(sv?.verb||"");
-  const [comp,setComp]=useState(sv?.comp||"");
-  const [manualMode,setManualMode]=useState(false);
-  const [manualText,setManualText]=useState("");
+  const [sentence,setSentence]=useState(sv?.sentence||"");
   const [feedback,setFeedback]=useState(sv?.feedback||null);
   const [loadingPrompt,setLoadingPrompt]=useState(false);
   const [loadingReview,setLoadingReview]=useState(false);
   const [error,setError]=useState(null);
-  const [suggestions,setSuggestions]=useState({});
-  const [loadingSuggest,setLoadingSuggest]=useState({});
+  const [ideas,setIdeas]=useState([]);
+  const [loadingIdeas,setLoadingIdeas]=useState(false);
   const [sheet,setSheet]=useState(null);
+  const [showCustom,setShowCustom]=useState(false);
+  const [customSuggestion,setCustomSuggestion]=useState("");
   const {speak}=useSpeech();
 
   const levelIdx=id=>LEVELS.findIndex(l=>l.id===id);
@@ -2382,14 +2355,17 @@ function Write({state,registerActivity}){
   const activeTense=availableTenses.some(t=>t.id===tense)?tense:(availableTenses[0]?.id||"present_simple");
   const formula=FORMULAS[activeTense][sentenceType];
 
-  useEffect(()=>{ writeSave({prompt,sentenceType,tense:activeTense,subject,verb,comp,feedback}); },[prompt,sentenceType,activeTense,subject,verb,comp,feedback]);
+  useEffect(()=>{ writeSave({prompt,sentenceType,tense:activeTense,sentence,feedback}); },[prompt,sentenceType,activeTense,sentence,feedback]);
 
-  const resetPieces=()=>{setSubject("");setVerb("");setComp("");setManualMode(false);setManualText("");setFeedback(null);setSuggestions({});setError(null);};
+  const resetSentence=()=>{setSentence("");setFeedback(null);setIdeas([]);setError(null);};
 
-  const newPrompt=async(topic)=>{
-    setLoadingPrompt(true);setError(null);setPrompt(null);resetPieces();
+  const newPrompt=async(topic,isCustom)=>{
+    setLoadingPrompt(true);setError(null);setPrompt(null);setShowCustom(false);resetSentence();
+    try{sessionStorage.removeItem("fluido-write");}catch(e){}
     try{
-      const topicLine=topic?`TEMA OBLIGATORIO de la consigna: ${topic}. `:"Debe pedir escribir sobre un tema cotidiano relacionado a sus intereses u objetivos. ";
+      const topicLine=isCustom
+        ? `El estudiante quiere practicar esta situación específica: "${topic}". Adáptala a UNA consigna breve. `
+        : (topic?`TEMA OBLIGATORIO de la consigna: ${topic}. `:"Debe pedir escribir sobre un tema cotidiano relacionado a sus intereses u objetivos. ");
       const data=await askAI_JSON(
         `Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera UNA consigna breve para practicar la construcción de UNA oración en inglés (no un párrafo), ajustada EXACTAMENTE a la complejidad del nivel indicado. ${topicLine}La consigna debe describir una situación comunicativa concreta donde el alumno necesite expresar UNA idea (ej: contarle a alguien un plan, pedir algo, describir una rutina, negar algo, preguntar algo). Varía el enfoque (semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve SOLO JSON: {"prompt_es":"consigna en español, breve y clara","example_hint_es":"pista corta opcional de qué incluir"}`,
         "Eres un profesor de inglés que diseña consignas breves para practicar construcción de oraciones."
@@ -2399,37 +2375,29 @@ function Write({state,registerActivity}){
     setLoadingPrompt(false);
   };
 
-  const suggestFor=async(piece)=>{
+  const getIdeas=async()=>{
     if(!prompt) return;
-    setLoadingSuggest(s=>({...s,[piece]:true}));
+    setLoadingIdeas(true);
     const tenseLabel=TENSES.find(t=>t.id===activeTense)?.label||activeTense;
     const typeLabel=SENTENCE_TYPES.find(t=>t.id===sentenceType)?.label||sentenceType;
-    const opts=await fetchSlotSuggestions(prompt.prompt_es,state.level,piece,tenseLabel,typeLabel,formula.verbHint);
-    setSuggestions(s=>({...s,[piece]:opts}));
-    setLoadingSuggest(s=>({...s,[piece]:false}));
+    const opts=await fetchSentenceIdeas(prompt.prompt_es,state.level,tenseLabel,typeLabel);
+    setIdeas(opts);
+    setLoadingIdeas(false);
   };
-
-  const finalSentence=()=>{
-    if(manualMode) return manualText.trim();
-    if(!subject.trim()||!verb.trim()) return "";
-    return cap1(formula.assemble(subject.trim(),verb.trim(),comp.trim()));
-  };
-
-  const enableManual=()=>{ setManualText(finalSentence()||""); setManualMode(true); };
 
   const submit=async()=>{
-    const sentence=finalSentence();
-    if(!sentence)return;
+    const text=sentence.trim();
+    if(!text)return;
     setLoadingReview(true);setError(null);
     try{
       const lvl=state.level;
       const tenseLabel=TENSES.find(t=>t.id===activeTense)?.label||activeTense;
       const typeLabel=SENTENCE_TYPES.find(t=>t.id===sentenceType)?.label||sentenceType;
       const data=await askAI_JSON(
-        `Nivel del alumno: ${lvl}. Consigna: "${prompt?.prompt_es||""}". El alumno está practicando la ESTRUCTURA: ${typeLabel} en ${tenseLabel}. Esto es lo que armó en inglés:\n"""${sentence}"""\n\nCorrige la oración. Sé constructivo y específico, acorde al nivel ${lvl}. Evalúa también si respetó la estructura objetivo (${typeLabel}, ${tenseLabel}): si NO la respetó bien, explica brevemente qué falló en "structure_note_es" (o null si la respetó bien). Devuelve SOLO JSON: {"corrected":"versión corregida natural en inglés","errors":[{"original":"fragmento","fix":"corrección","why_es":"explicación breve en español"}],"praise_es":"algo breve que hizo bien","structure_ok":true,"structure_note_es":"explicación breve o null"}`,
+        `Nivel del alumno: ${lvl}. Consigna: "${prompt?.prompt_es||""}". El alumno está practicando la ESTRUCTURA: ${typeLabel} en ${tenseLabel}. Esto es lo que escribió en inglés:\n"""${text}"""\n\nCorrige la oración. Sé constructivo y específico, acorde al nivel ${lvl}. Evalúa también si respetó la estructura objetivo (${typeLabel}, ${tenseLabel}): si NO la respetó bien, explica brevemente qué falló en "structure_note_es" (o null si la respetó bien). Devuelve SOLO JSON: {"corrected":"versión corregida natural en inglés","errors":[{"original":"fragmento","fix":"corrección","why_es":"explicación breve en español"}],"praise_es":"algo breve que hizo bien","structure_ok":true,"structure_note_es":"explicación breve o null"}`,
         "Eres un profesor de inglés que corrige oraciones y evalúa si el alumno aplicó bien la estructura gramatical pedida, con tono alentador."
       );
-      setFeedback({...data,sentence,tenseLabel,typeLabel});
+      setFeedback({...data,sentence:text,tenseLabel,typeLabel});
       if(data.corrected) sesNote("✍️ Escribir",{head:data.corrected,sub:prompt?prompt.prompt_es:"",note:`${typeLabel} · ${tenseLabel}`});
       (data.errors||[]).slice(0,5).forEach(e=>sesNote("✍️ Escribir",{head:e.fix,sub:"en vez de: "+e.original,note:e.why_es}));
       recordPerf("write", lvl, !(data.errors&&data.errors.length>0));
@@ -2448,21 +2416,44 @@ function Write({state,registerActivity}){
   return(
     <div>
       <h2 style={{fontSize:26,fontWeight:800,marginBottom:4}}>Escribir</h2>
-      <p style={{fontSize:14,color:C.inkSoft,marginBottom:12}}>Aprende la fórmula, arma tu oración pieza por pieza y recibe corrección.</p>
+      <p style={{fontSize:14,color:C.inkSoft,marginBottom:12}}>Mira la fórmula como guía y escribe tu oración — te la corrijo al toque.</p>
       <ModuleInfo id="write" points={[
-        ["🧩",<>Es tu <strong>taller de construcción de oraciones</strong>: eliges tipo (afirmativa/negativa/pregunta) y tiempo verbal, ves la fórmula, y armas tu oración pieza por pieza.</>],
-        ["🔍",<>Entrena tu <strong>precisión gramatical</strong>: cada pieza tiene su función, y al final recibes corrección + si respetaste la estructura pedida.</>],
+        ["🧩",<>Es tu <strong>taller de construcción de oraciones</strong>: eliges tipo (afirmativa/negativa/pregunta) y tiempo verbal, ves la fórmula con un ejemplo, y escribes tu propia oración siguiendo esa guía.</>],
+        ["🔍",<>Entrena tu <strong>precisión gramatical</strong>: recibes corrección + si respetaste la estructura pedida, con explicación en español.</>],
         ["🔁",<>Puedes repetir el mismo escenario con <strong>otra estructura</strong> para practicar cómo cambia la oración según el tiempo verbal.</>]
       ]}/>
 
       {!prompt&&!loadingPrompt&&(
         <div>
-          <BigButton onClick={()=>newPrompt()}>✨ Pedir un escenario</BigButton>
-          {(()=>{const pt=loadPersonalTopics().topics;if(!pt.length)return null;return(
-            <div style={{marginTop:14}}>
-              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"0 0 8px"}}>✨ O escribe sobre tus temas</p>
-              <ChipsWithSheet items={pt} onPick={t=>newPrompt(t.en)} limit={4} title="✨ Tus temas"/>
-            </div>);})()}
+          {!showCustom?(
+            <>
+              <BigButton onClick={()=>newPrompt()}>✨ Pedir un escenario</BigButton>
+              <button onClick={()=>setShowCustom(true)}
+                style={{width:"100%",marginTop:10,padding:"13px 18px",borderRadius:14,border:`1.5px solid ${C.blue}`,background:"transparent",color:C.blue,fontWeight:600,fontSize:15}}>
+                ✏️ Proponer mi propio escenario
+              </button>
+              {(()=>{const pt=loadPersonalTopics().topics;if(!pt.length)return null;return(
+                <div style={{marginTop:14}}>
+                  <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"0 0 8px"}}>✨ O escribe sobre tus temas</p>
+                  <ChipsWithSheet items={pt} onPick={t=>newPrompt(t.en)} limit={4} title="✨ Tus temas"/>
+                </div>);})()}
+            </>
+          ):(
+            <div className="fadein" style={{background:C.card,border:`1.5px solid ${C.blue}`,borderRadius:16,padding:18}}>
+              <p style={{fontWeight:600,marginBottom:8}}>¿Qué situación quieres practicar?</p>
+              <p style={{fontSize:13,color:C.inkSoft,marginBottom:10}}>Descríbela en español — Fluido la adaptará a tu nivel.</p>
+              <textarea value={customSuggestion} onChange={e=>setCustomSuggestion(e.target.value)}
+                placeholder="Ej: contarle a mi jefe que voy a llegar tarde... / pedirle a un colega que revise mi código... / describir mi rutina de la mañana..."
+                rows={4} style={{width:"100%",padding:"12px 14px",fontSize:14,borderRadius:12,border:`1.5px solid ${C.line}`,outline:"none",resize:"vertical",background:C.paper,color:C.ink}}/>
+              <div style={{display:"flex",gap:8,marginTop:10}}>
+                <button onClick={()=>setShowCustom(false)} style={{flex:1,padding:"12px 0",borderRadius:12,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:500}}>Cancelar</button>
+                <button onClick={()=>newPrompt(customSuggestion,true)} disabled={!customSuggestion.trim()}
+                  style={{flex:2,padding:"12px 0",borderRadius:12,border:"none",background:customSuggestion.trim()?C.blue:C.line,color:"#fff",fontWeight:600,fontSize:15}}>
+                  Generar escenario →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
       {loadingPrompt&&<p style={{fontSize:14,color:C.inkSoft}}>Pensando un escenario…</p>}
@@ -2477,44 +2468,44 @@ function Write({state,registerActivity}){
           {!feedback?(
             <>
               <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:6}}>Tipo de oración</p>
-              <ChipRow options={SENTENCE_TYPES} value={sentenceType} onChange={v=>{setSentenceType(v);resetPieces();}}/>
+              <ChipRow options={SENTENCE_TYPES} value={sentenceType} onChange={v=>{setSentenceType(v);resetSentence();}}/>
 
               <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,margin:"14px 0 6px"}}>Tiempo verbal</p>
-              <ChipRow options={availableTenses} value={activeTense} onChange={v=>{setTense(v);resetPieces();}}/>
+              <ChipRow options={availableTenses} value={activeTense} onChange={v=>{setTense(v);resetSentence();}}/>
 
               <div style={{marginTop:14}}>
                 <FormulaCard tenseId={activeTense} typeId={sentenceType}/>
               </div>
 
-              <SlotInput label="Sujeto" placeholder="I / She / The team…" value={subject} onChange={setSubject}
-                onSuggest={()=>suggestFor("Sujeto")} loadingSuggest={!!loadingSuggest.Sujeto} suggestions={suggestions.Sujeto}/>
-              <SlotInput label="Verbo" placeholder="go / like / work…" value={verb} onChange={setVerb} hint={formula.verbHint}
-                onSuggest={()=>suggestFor("Verbo")} loadingSuggest={!!loadingSuggest.Verbo} suggestions={suggestions.Verbo}/>
-              <SlotInput label="Complemento" placeholder="to work / a new car / tomorrow…" value={comp} onChange={setComp}
-                onSuggest={()=>suggestFor("Complemento")} loadingSuggest={!!loadingSuggest.Complemento} suggestions={suggestions.Complemento}/>
-
-              <div style={{marginTop:6,marginBottom:14}}>
-                <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:6}}>Tu oración</p>
-                {manualMode?(
-                  <textarea value={manualText} onChange={e=>setManualText(e.target.value)} rows={2}
-                    style={{width:"100%",padding:"12px 14px",borderRadius:12,border:`1.5px solid ${C.blue}`,background:C.paper,color:C.ink,fontFamily:FEN,fontSize:16,lineHeight:1.5,resize:"vertical"}}/>
-                ):(
-                  <div style={{padding:"12px 14px",borderRadius:12,border:`1.5px dashed ${C.line}`,background:C.paper,minHeight:24}}>
-                    <p style={{margin:0,fontFamily:FEN,fontSize:16,color:finalSentence()?C.ink:C.inkSoft,lineHeight:1.5}}>
-                      {finalSentence()||"Completa sujeto y verbo para ver tu oración…"}
-                    </p>
-                  </div>
-                )}
-                {!manualMode&&<button onClick={enableManual} style={{marginTop:6,border:"none",background:"transparent",color:C.blue,fontSize:12,fontWeight:600,padding:0,textDecoration:"underline"}}>✏️ Ajustar manualmente</button>}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,margin:0}}>Tu oración</p>
+                <button onClick={getIdeas} disabled={loadingIdeas}
+                  style={{border:"none",background:"transparent",color:C.blue,fontSize:12,fontWeight:600,padding:0}}>
+                  {loadingIdeas?"…":"💡 Dame ideas"}
+                </button>
               </div>
+              <textarea value={sentence} onChange={e=>setSentence(e.target.value)} rows={3}
+                placeholder="Escribe tu oración en inglés siguiendo la fórmula de arriba…"
+                style={{width:"100%",padding:"12px 14px",borderRadius:12,border:`1.5px solid ${C.line}`,background:C.paper,color:C.ink,fontFamily:FEN,fontSize:16,lineHeight:1.5,resize:"vertical"}}/>
+              {ideas.length>0&&(
+                <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:8}}>
+                  {ideas.map((idea,i)=>(
+                    <button key={i} onClick={()=>setSentence(idea.en)}
+                      style={{textAlign:"left",padding:"8px 12px",borderRadius:10,border:`1px solid ${C.line}`,background:C.card,cursor:"pointer"}}>
+                      <span style={{display:"block",fontFamily:FEN,fontSize:14,color:C.ink}}>{idea.en}</span>
+                      <span style={{display:"block",fontSize:12,color:C.inkSoft,fontStyle:"italic"}}>{idea.es}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
-              <div style={{display:"flex",gap:8,marginTop:10}}>
+              <div style={{display:"flex",gap:8,marginTop:14}}>
                 <button onClick={()=>newPrompt()} disabled={loadingReview}
                   style={{padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:600,fontSize:13}}>
                   Cambiar escenario
                 </button>
-                <button onClick={submit} disabled={loadingReview||!finalSentence()}
-                  style={{flex:1,padding:"10px 14px",borderRadius:10,border:"none",background:C.blue,color:"#fff",fontWeight:700,fontSize:14,opacity:(loadingReview||!finalSentence())?0.6:1}}>
+                <button onClick={submit} disabled={loadingReview||!sentence.trim()}
+                  style={{flex:1,padding:"10px 14px",borderRadius:10,border:"none",background:C.blue,color:"#fff",fontWeight:700,fontSize:14,opacity:(loadingReview||!sentence.trim())?0.6:1}}>
                   {loadingReview?"Revisando…":"Corregir"}
                 </button>
               </div>
@@ -2556,7 +2547,7 @@ function Write({state,registerActivity}){
               {error&&<p style={{fontSize:13,color:C.coral,marginTop:10}}>{error}</p>}
 
               <div style={{display:"flex",gap:8,marginTop:8}}>
-                <button onClick={resetPieces} style={{flex:1,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.line}`,background:"transparent",color:C.ink,fontWeight:600,fontSize:13}}>
+                <button onClick={resetSentence} style={{flex:1,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.line}`,background:"transparent",color:C.ink,fontWeight:600,fontSize:13}}>
                   🔁 Otra estructura
                 </button>
                 <button onClick={()=>newPrompt()} style={{flex:1,padding:"10px 14px",borderRadius:10,border:"none",background:C.blue,color:"#fff",fontWeight:700,fontSize:13}}>
@@ -2576,9 +2567,6 @@ function Write({state,registerActivity}){
   );
 }
 
-// ============================================================
-// CHEQUEO DE NIVEL — analiza desempeño real y recomienda subir/bajar/mantener
-// ============================================================
 function LevelBar({label,pct,note}){
   const has = pct!==null;
   return(
