@@ -600,7 +600,7 @@ function App(){
         {tab==="settings" && <Settings state={state} save={save} onAIChanged={handleAIChanged} onThemeChange={handleThemeChange}/>}
         </div>
       </div>
-      {!desktop&&<TabBar tab={tab} setTab={setTab} level={state.level}/>}
+      {!desktop&&<TabBarLayout tab={tab} setTab={setTab}/>}
       <SessionFab level={state.level}/>
     </div>
   );
@@ -883,27 +883,96 @@ function SideNav({tab,setTab,name,level}){
 // ============================================================
 // NAVEGACIÓN
 // ============================================================
-function TabBar({tab,setTab,level}){
-  const isBasic=level==="A0"||level==="A2";
-  const items=[{id:"home",icon:"⌂",label:"Inicio"},{id:"talk",icon:"❝",label:"Conversar"},{id:"phrases",icon:"❏",label:isBasic?"Vocab":"Frases"},{id:"write",icon:"✐",label:"Escribir"},{id:"listen",icon:"♪",label:"Escuchar"},{id:"settings",icon:"⚙",label:"Ajustes"}];
-  const n=items.length;
-  const rawIdx=items.findIndex(it=>tab===it.id||(it.id==="phrases"&&tab==="grammar"));
-  const idx=rawIdx<0?0:rawIdx;
-  const centerPct=(idx+0.5)/n*100;
+// ============================================================
+// ICONOS DE NAVEGACIÓN — SVG inline (sin librerías), variante
+// outline (inactivo) y solid (activo) por cada ítem.
+// ============================================================
+function NavIcon({name,solid,size=22}){
+  const common={width:size,height:size,viewBox:"0 0 24 24"};
+  switch(name){
+    case "home":
+      return solid?(
+        <svg {...common} fill="currentColor"><path d="M12 3 2.4 11h2.1V20a1 1 0 0 0 1 1H9v-6.2a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V21h3.5a1 1 0 0 0 1-1v-9h2.1z"/></svg>
+      ):(
+        <svg {...common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 11 12 4l8.5 7"/><path d="M5.8 9.8V20a1 1 0 0 0 1 1H9.5v-5.5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V21h2.7a1 1 0 0 0 1-1V9.8"/></svg>
+      );
+    case "chat":
+      return solid?(
+        <svg {...common} fill="currentColor"><path d="M6.2 3.5A2.7 2.7 0 0 0 3.5 6.2v7.6a2.7 2.7 0 0 0 2.7 2.7h.6v3.4a.8.8 0 0 0 1.3.6l4.4-4h5A2.7 2.7 0 0 0 20.5 13.8V6.2a2.7 2.7 0 0 0-2.7-2.7z"/></svg>
+      ):(
+        <svg {...common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6.2 3.5h11.6a2.7 2.7 0 0 1 2.7 2.7v7.6a2.7 2.7 0 0 1-2.7 2.7h-5l-4.4 4v-4h-.6a2.7 2.7 0 0 1-2.7-2.7V6.2a2.7 2.7 0 0 1 2.7-2.7z"/></svg>
+      );
+    case "book": // Vocab — se usa solo dentro del CenterFAB, siempre sólido en blanco
+      return(
+        <svg {...common} fill="currentColor"><path d="M4 4.8A1.8 1.8 0 0 1 5.8 3H11v18H5.8A1.8 1.8 0 0 1 4 19.2z"/><path d="M13 3h5.2A1.8 1.8 0 0 1 20 4.8v14.4a1.8 1.8 0 0 1-1.8 1.8H13z" opacity="0.72"/></svg>
+      );
+    case "pencil":
+      return solid?(
+        <svg {...common} fill="currentColor"><path d="M18.6 2.3a2.6 2.6 0 0 1 3.7 3.7L20.6 7.7 16.9 4z"/><path d="M2.8 21.2l1.1-4.7L15.6 4.8 19.3 8.5 7.6 20.2z"/></svg>
+      ):(
+        <svg {...common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16.7 3.6a2.3 2.3 0 0 1 3.3 3.3L7.6 19.3l-4.3 1 1-4.3z"/></svg>
+      );
+    case "gear":
+      return(
+        <svg {...common} fill="none" stroke="currentColor" strokeWidth={solid?0:2} strokeLinecap="round" strokeLinejoin="round">
+          {[0,45,90,135,180,225,270,315].map(deg=>(
+            <line key={deg} x1="12" y1="2.3" x2="12" y2={solid?"5.6":"5"} stroke="currentColor" strokeWidth={solid?3:2} transform={`rotate(${deg} 12 12)`}/>
+          ))}
+          <circle cx="12" cy="12" r="6" fill={solid?"currentColor":"none"}/>
+        </svg>
+      );
+    default: return null;
+  }
+}
+
+// Tab estándar (Inicio / Conversar / Escribir / Ajustes): contorno gris cuando
+// inactivo, relleno + guion superior en color primario cuando activo.
+function TabItem({icon,label,active,onClick}){
   return(
-    <nav style={{position:"fixed",bottom:0,left:0,right:0,display:"flex",justifyContent:"center",zIndex:50,padding:"0 10px calc(10px + env(safe-area-inset-bottom, 0px))",background:"transparent",pointerEvents:"none"}}>
-      <div style={{position:"relative",width:"100%",maxWidth:560,pointerEvents:"auto"}}>
-        <div className="elev" style={{position:"relative",zIndex:1,display:"flex",width:"100%",background:C.card,border:`1px solid ${C.line}`,borderRadius:22,padding:"6px 6px 5px"}}>
-          {items.map((it,i)=>{const on=i===idx;return(
-            <button key={it.id} onClick={()=>setTab(it.id)} aria-label={it.label} aria-current={on?"page":undefined}
-              style={{flex:1,padding:on?"24px 2px 5px":"8px 2px",border:"none",background:"transparent",borderRadius:16,color:on?C.blue:C.inkSoft,fontWeight:on?700:500,fontSize:10,display:"flex",flexDirection:"column",alignItems:"center",gap:2,transition:"padding .2s ease"}}>
-              {!on&&<span style={{fontSize:17,lineHeight:1}}>{it.icon}</span>}
-              <span>{it.label}</span>
-            </button>);})}
+    <button onClick={onClick} aria-label={label} aria-current={active?"page":undefined}
+      style={{flex:1,position:"relative",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",gap:3,padding:"12px 2px 6px",border:"none",background:"transparent"}}>
+      {active&&<span aria-hidden="true" style={{position:"absolute",top:2,width:16,height:3,borderRadius:99,background:C.blue}}/>}
+      <span style={{color:active?C.blue:C.inkSoft,display:"flex"}}><NavIcon name={icon} solid={active} size={22}/></span>
+      <span style={{fontSize:10,fontWeight:active?700:500,color:active?C.blue:C.inkSoft,lineHeight:1}}>{label}</span>
+    </button>
+  );
+}
+
+// Botón central flotante (Vocab): sobresale del borde superior de la barra,
+// con resplandor difuminado del mismo tono proyectado sobre el contenedor.
+// FAB_ACCENT usa el acento del tema activo (C.blue) para no romper los 8 temas
+// de Ajustes — si en cambio quieres un morado fijo siempre, cambia esta línea
+// por: const FAB_ACCENT = "#7C3AED";
+function CenterFAB({label,active,onClick}){
+  const FAB_ACCENT=C.blue;
+  return(
+    <div style={{position:"relative",flex:"0 0 auto",width:72,display:"flex",flexDirection:"column",alignItems:"center"}}>
+      <div aria-hidden="true" style={{position:"absolute",top:-42,left:"50%",transform:"translateX(-50%)",width:80,height:80,borderRadius:"50%",background:FAB_ACCENT,filter:"blur(16px)",opacity:0.5,zIndex:0,pointerEvents:"none"}}/>
+      <button onClick={onClick} aria-label={label} aria-current={active?"page":undefined}
+        style={{position:"relative",zIndex:1,marginTop:-32,width:58,height:58,borderRadius:"50%",border:`4px solid ${C.card}`,background:`linear-gradient(145deg, ${FAB_ACCENT}, ${FAB_ACCENT}CC)`,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 10px 22px ${FAB_ACCENT}77`}}>
+        <NavIcon name="book" size={23}/>
+      </button>
+      <span style={{marginTop:5,fontSize:10,fontWeight:active?700:600,color:active?FAB_ACCENT:C.inkSoft,lineHeight:1}}>{label}</span>
+    </div>
+  );
+}
+
+// Contenedor: pastilla flotante con márgenes, 2 tabs a la izquierda,
+// CenterFAB al medio, 2 tabs a la derecha. "Escuchar" ya no vive aquí
+// (queda accesible desde Inicio → Práctica rápida).
+function TabBarLayout({tab,setTab}){
+  const LEFT=[{id:"home",icon:"home",label:"Inicio"},{id:"talk",icon:"chat",label:"Conversar"}];
+  const RIGHT=[{id:"write",icon:"pencil",label:"Escribir"},{id:"settings",icon:"gear",label:"Ajustes"}];
+  const vocabActive=tab==="phrases"||tab==="grammar";
+  return(
+    <nav style={{position:"fixed",bottom:0,left:0,right:0,display:"flex",justifyContent:"center",zIndex:50,padding:"0 16px calc(14px + env(safe-area-inset-bottom, 0px))",pointerEvents:"none"}}>
+      <div className="elev" style={{pointerEvents:"auto",width:"100%",maxWidth:420,display:"flex",alignItems:"flex-end",justifyContent:"space-between",background:C.card,border:`1px solid ${C.line}`,borderRadius:999,padding:"4px 8px 6px",position:"relative"}}>
+        <div style={{display:"flex",flex:1}}>
+          {LEFT.map(it=><TabItem key={it.id} icon={it.icon} label={it.label} active={tab===it.id} onClick={()=>setTab(it.id)}/>)}
         </div>
-        {/* burbuja elevada del tab activo — el anillo (borde color fondo) crea el efecto "muesca" de la referencia */}
-        <div aria-hidden="true" style={{position:"absolute",left:`${centerPct}%`,top:-26,width:48,height:48,transform:"translateX(-50%)",borderRadius:"50%",background:`linear-gradient(145deg, ${C.blue}, ${C.blue}CC)`,border:`5px solid ${C.paper}`,color:"#fff",fontSize:20,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 8px 18px ${C.blue}55`,zIndex:3,transition:"left .3s cubic-bezier(.34,1.56,.64,1)",pointerEvents:"none",boxSizing:"content-box"}}>
-          {items[idx].icon}
+        <CenterFAB label="Vocab" active={vocabActive} onClick={()=>setTab("phrases")}/>
+        <div style={{display:"flex",flex:1}}>
+          {RIGHT.map(it=><TabItem key={it.id} icon={it.icon} label={it.label} active={tab===it.id} onClick={()=>setTab(it.id)}/>)}
         </div>
       </div>
     </nav>
