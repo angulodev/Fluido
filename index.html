@@ -498,6 +498,8 @@ function App(){
     return()=>window.removeEventListener("hashchange",onHash);
   },[]);
   const [aiReady,setAiReady]=useState(()=>isAIReady());
+  const stateRef=useRef(state);
+  stateRef.current=state;
   const desktop=useIsDesktop();
   const [themeVer,setThemeVer]=useState(0); // fuerza re-render al cambiar tema
 
@@ -544,13 +546,14 @@ function App(){
       if(n>0){
         const mins=Math.max(1,Math.round((Date.now()-ses.start)/60000));
         const items=ses.notes.map(x=>({head:x.head,sub:x.sub,note:(x.module?x.module+(x.note?" · ":""):"")+(x.note||"")}));
-        archiveSheet({id:"cs"+Date.now()+Math.random().toString(36).slice(2,6),ts:Date.now(),title:`Resumen de tu sesión (auto) · ${mins} min`,items,extra:null});
+        archiveSheet({id:"cs"+Date.now()+Math.random().toString(36).slice(2,6),ts:Date.now(),title:`Resumen de tu sesión (auto) · ${mins} min`,items,level:stateRef.current.level,extra:null,needsTips:true});
       }
       sesEnd();
     };
     const startAuto=()=>{ if(isAutoSession()&&!sesActive()) sesStart(); };
     startAuto();
-    const onVis=()=>{ if(document.visibilityState==="hidden") finishAuto(); else if(document.visibilityState==="visible") startAuto(); };
+    completePendingTips();
+    const onVis=()=>{ if(document.visibilityState==="hidden") finishAuto(); else if(document.visibilityState==="visible"){startAuto();completePendingTips();} };
     document.addEventListener("visibilitychange",onVis);
     window.addEventListener("pagehide",finishAuto);
     return()=>{document.removeEventListener("visibilitychange",onVis);window.removeEventListener("pagehide",finishAuto);};
@@ -1379,6 +1382,38 @@ function saveSheetsList(a){try{localStorage.setItem(SHEETS_KEY,JSON.stringify(a.
 function archiveSheet(rec){const a=loadSheets().filter(x=>x.id!==rec.id);a.push(rec);saveSheetsList(a);}
 function deleteSheet(id){saveSheetsList(loadSheets().filter(x=>x.id!==id));}
 
+// Genera el material extra (tips/repaso/consejo) de un cheat sheet a partir de sus items.
+// Reutilizada tanto por CheatSheet (al crearse) como por completePendingTips (en segundo plano).
+async function generateSheetTips(items,level){
+  const compact=items.slice(0,12).map(it=>({en:it.head,es:it.sub||"",nota:it.note||""}));
+  const r=await askAI_JSON(
+    `Nivel del estudiante: ${level||"A2"}. Estas son las notas de su sesión de práctica de inglés:\n${JSON.stringify(compact)}\n\nGenera material de estudio breve y ESPECÍFICO a estas notas (no genérico). Devuelve SOLO JSON: {"tips":["2-3 tips concretos en español sobre los patrones de error o las estructuras vistas"],"repasar":[{"en":"elemento en inglés que conviene repasar","es":"traducción"}],"consejo_es":"un consejo breve y motivador"}`,
+    "Eres un profesor de inglés que crea material de repaso conciso, específico y accionable.");
+  return {
+    tips:{icon:"💡",label:"Tips",color:"#D97706",items:(r.tips||[]).map(t=>({head:t}))},
+    rep:{icon:"🔁",label:"Para repasar",color:"#3B82F6",items:(r.repasar||[]).map(x=>({head:x.en,sub:x.es}))},
+    con:{icon:"🎯",label:"Consejo",color:"#7C6FE0",items:r.consejo_es?[{head:r.consejo_es}]:[]}
+  };
+}
+// Completa en segundo plano los cheat sheets que la sesión automática archivó sin tips
+// (para no depender de una llamada async justo cuando la app pasa a segundo plano).
+// Se llama al abrir/volver a la app; idempotente y con guardia anti-solapamiento.
+let _completingTips=false;
+async function completePendingTips(){
+  if(_completingTips) return;
+  if(!isAIReady()) return;
+  const pending=loadSheets().filter(s=>s.needsTips).sort((a,b)=>b.ts-a.ts).slice(0,3);
+  if(!pending.length) return;
+  _completingTips=true;
+  for(const s of pending){
+    try{
+      const extra=await generateSheetTips(s.items,s.level);
+      archiveSheet({...s,extra,needsTips:false});
+    }catch(e){ /* se reintenta la próxima vez que se abra la app */ }
+  }
+  _completingTips=false;
+}
+
 function CheatSheet({title,items,level,withTips,preExtra,sheetId,onClose}){
   const base={icon:"📌",label:"Lo de esta sesión",color:"#10B981",items};
   const idRef=useRef(sheetId||("cs"+Date.now()+Math.random().toString(36).slice(2,6)));
@@ -1391,16 +1426,9 @@ function CheatSheet({title,items,level,withTips,preExtra,sheetId,onClose}){
     let alive=true;
     (async()=>{
       try{
-        const compact=items.slice(0,12).map(it=>({en:it.head,es:it.sub||"",nota:it.note||""}));
-        const r=await askAI_JSON(
-          `Nivel del estudiante: ${level||"A2"}. Estas son las notas de su sesión de práctica de inglés:\n${JSON.stringify(compact)}\n\nGenera material de estudio breve y ESPECÍFICO a estas notas (no genérico). Devuelve SOLO JSON: {"tips":["2-3 tips concretos en español sobre los patrones de error o las estructuras vistas"],"repasar":[{"en":"elemento en inglés que conviene repasar","es":"traducción"}],"consejo_es":"un consejo breve y motivador"}`,
-          "Eres un profesor de inglés que crea material de repaso conciso, específico y accionable.");
+        const extra=await generateSheetTips(items,level);
         if(!alive) return;
-        setExtra({
-          tips:{icon:"💡",label:"Tips",color:"#D97706",items:(r.tips||[]).map(t=>({head:t}))},
-          rep:{icon:"🔁",label:"Para repasar",color:"#3B82F6",items:(r.repasar||[]).map(x=>({head:x.en,sub:x.es}))},
-          con:{icon:"🎯",label:"Consejo",color:"#7C6FE0",items:r.consejo_es?[{head:r.consejo_es}]:[]}
-        });
+        setExtra(extra);
       }catch(e){}
       if(alive) setTipsLoading(false);
     })();
