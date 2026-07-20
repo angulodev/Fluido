@@ -896,7 +896,7 @@ function TabBar({tab,setTab,level}){
         <div className="elev" style={{position:"relative",zIndex:1,display:"flex",width:"100%",background:C.card,border:`1px solid ${C.line}`,borderRadius:22,padding:"6px 6px 5px"}}>
           {items.map((it,i)=>{const on=i===idx;return(
             <button key={it.id} onClick={()=>setTab(it.id)} aria-label={it.label} aria-current={on?"page":undefined}
-              style={{flex:1,padding:"22px 2px 5px",border:"none",background:"transparent",borderRadius:16,color:on?C.blue:C.inkSoft,fontWeight:on?700:500,fontSize:10,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+              style={{flex:1,padding:"8px 2px 5px",border:"none",background:"transparent",borderRadius:16,color:on?C.blue:C.inkSoft,fontWeight:on?700:500,fontSize:10,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
               <span style={{fontSize:17,lineHeight:1,visibility:on?"hidden":"visible"}}>{it.icon}</span>
               <span>{it.label}</span>
             </button>);})}
