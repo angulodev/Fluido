@@ -896,15 +896,13 @@ function TabBar({tab,setTab,level}){
         <div className="elev" style={{position:"relative",zIndex:1,display:"flex",width:"100%",background:C.card,border:`1px solid ${C.line}`,borderRadius:22,padding:"6px 6px 5px"}}>
           {items.map((it,i)=>{const on=i===idx;return(
             <button key={it.id} onClick={()=>setTab(it.id)} aria-label={it.label} aria-current={on?"page":undefined}
-              style={{flex:1,padding:on?"26px 2px 4px":"8px 2px",border:"none",background:"transparent",borderRadius:16,color:on?C.blue:C.inkSoft,fontWeight:on?700:500,fontSize:10,display:"flex",flexDirection:"column",alignItems:"center",gap:2,transition:"padding .2s ease"}}>
+              style={{flex:1,padding:on?"24px 2px 5px":"8px 2px",border:"none",background:"transparent",borderRadius:16,color:on?C.blue:C.inkSoft,fontWeight:on?700:500,fontSize:10,display:"flex",flexDirection:"column",alignItems:"center",gap:2,transition:"padding .2s ease"}}>
               {!on&&<span style={{fontSize:17,lineHeight:1}}>{it.icon}</span>}
               <span>{it.label}</span>
             </button>);})}
         </div>
-        {/* "muesca" que funde el borde superior de la barra con el fondo, detrás de la burbuja */}
-        <div aria-hidden="true" style={{position:"absolute",left:`${centerPct}%`,top:-16,width:60,height:38,background:C.paper,borderRadius:"50%",transform:"translateX(-50%)",zIndex:2,transition:"left .3s cubic-bezier(.34,1.56,.64,1)",pointerEvents:"none"}}/>
-        {/* burbuja elevada del tab activo */}
-        <div aria-hidden="true" style={{position:"absolute",left:`${centerPct}%`,top:-19,width:50,height:50,transform:"translateX(-50%)",borderRadius:"50%",background:`linear-gradient(145deg, ${C.blue}, ${C.blue}CC)`,color:"#fff",fontSize:21,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 10px 20px ${C.blue}55`,zIndex:3,transition:"left .3s cubic-bezier(.34,1.56,.64,1)",pointerEvents:"none"}}>
+        {/* burbuja elevada del tab activo — el anillo (borde color fondo) crea el efecto "muesca" de la referencia */}
+        <div aria-hidden="true" style={{position:"absolute",left:`${centerPct}%`,top:-26,width:48,height:48,transform:"translateX(-50%)",borderRadius:"50%",background:`linear-gradient(145deg, ${C.blue}, ${C.blue}CC)`,border:`5px solid ${C.paper}`,color:"#fff",fontSize:20,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 8px 18px ${C.blue}55`,zIndex:3,transition:"left .3s cubic-bezier(.34,1.56,.64,1)",pointerEvents:"none",boxSizing:"content-box"}}>
           {items[idx].icon}
         </div>
       </div>
