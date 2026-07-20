@@ -901,8 +901,8 @@ function TabBar({tab,setTab,level}){
               <span>{it.label}</span>
             </button>);})}
         </div>
-        {/* burbuja elevada del tab activo — el anillo usa el color de la navbar (C.card), no el de la página */}
-        <div aria-hidden="true" style={{position:"absolute",left:`${centerPct}%`,top:-26,width:48,height:48,transform:"translateX(-50%)",borderRadius:"50%",background:`linear-gradient(145deg, ${C.blue}, ${C.blue}CC)`,border:`5px solid ${C.card}`,color:"#fff",fontSize:20,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 8px 18px ${C.blue}55`,zIndex:3,transition:"left .3s cubic-bezier(.34,1.56,.64,1)",pointerEvents:"none",boxSizing:"content-box"}}>
+        {/* burbuja elevada del tab activo — sin sombra/resplandor, solo el anillo del color de la navbar */}
+        <div aria-hidden="true" style={{position:"absolute",left:`${centerPct}%`,top:-26,width:48,height:48,transform:"translateX(-50%)",borderRadius:"50%",background:`linear-gradient(145deg, ${C.blue}, ${C.blue}CC)`,border:`5px solid ${C.card}`,color:"#fff",fontSize:20,display:"flex",alignItems:"center",justifyContent:"center",zIndex:3,transition:"left .3s cubic-bezier(.34,1.56,.64,1)",pointerEvents:"none",boxSizing:"content-box"}}>
           {items[idx].icon}
         </div>
       </div>
