@@ -423,6 +423,9 @@ function fluidoNotify(title,body){
 // 🔇 Modo silencio global — para repasar sin que la app hable sola (metro, oficina, gente cerca)
 function isSilent(){try{return localStorage.getItem("fluido-silent")==="1";}catch(e){return false;}}
 function saveSilent(v){try{localStorage.setItem("fluido-silent",v?"1":"0");}catch(e){}}
+// 🎓 Sesión de estudio automática — inicia al entrar a la app y finaliza (con cheat sheet) al salir
+function isAutoSession(){try{return localStorage.getItem("fluido-auto-session")==="1";}catch(e){return false;}}
+function saveAutoSession(v){try{localStorage.setItem("fluido-auto-session",v?"1":"0");}catch(e){}}
 function useSpeech(){
   const [voices,setVoices]=useState([]);
   const supported=typeof window!=="undefined"&&"speechSynthesis" in window;
@@ -529,6 +532,28 @@ function App(){
     document.addEventListener("visibilitychange",onVis);
     window.addEventListener("focus",check);
     return()=>{clearInterval(id);document.removeEventListener("visibilitychange",onVis);window.removeEventListener("focus",check);};
+  },[]);
+
+  // 🎓 Sesión de estudio automática — si está activada en Ajustes, arranca al entrar/volver
+  // a la app y finaliza (armando el cheat sheet si hay notas) al salir o pasar a segundo plano.
+  useEffect(()=>{
+    const finishAuto=()=>{
+      if(!isAutoSession()) return;
+      const ses=sesActive(); if(!ses) return;
+      const n=(ses.notes||[]).length;
+      if(n>0){
+        const mins=Math.max(1,Math.round((Date.now()-ses.start)/60000));
+        const items=ses.notes.map(x=>({head:x.head,sub:x.sub,note:(x.module?x.module+(x.note?" · ":""):"")+(x.note||"")}));
+        archiveSheet({id:"cs"+Date.now()+Math.random().toString(36).slice(2,6),ts:Date.now(),title:`Resumen de tu sesión (auto) · ${mins} min`,items,extra:null});
+      }
+      sesEnd();
+    };
+    const startAuto=()=>{ if(isAutoSession()&&!sesActive()) sesStart(); };
+    startAuto();
+    const onVis=()=>{ if(document.visibilityState==="hidden") finishAuto(); else if(document.visibilityState==="visible") startAuto(); };
+    document.addEventListener("visibilitychange",onVis);
+    window.addEventListener("pagehide",finishAuto);
+    return()=>{document.removeEventListener("visibilitychange",onVis);window.removeEventListener("pagehide",finishAuto);};
   },[]);
 
   const registerActivity=useCallback((block,extra)=>{
@@ -1738,6 +1763,8 @@ function Talk({state,registerActivity}){
         "Eres un coach de inglés cálido y preciso. Corriges sin desanimar.");
       setMessages(m=>{const c=[...m];c[c.length-1]={...myMsg,feedback:data};return[...c,{role:"them",text:data.reply_en,es:data.reply_es||null}];});
       if(voiceMode) setTimeout(()=>speak(data.reply_en),300);
+      if(data.natural_en) sesNote("💬 Conversar",{head:data.natural_en,sub:scenario?scenario.title_es:"",note:"✅ Versión natural"});
+      (data.errors||[]).slice(0,5).forEach(e=>sesNote("💬 Conversar",{head:e.right,sub:"en vez de: "+e.wrong,note:e.why_es}));
       recordPerf("talk", state.level, !(data.errors&&data.errors.length>0));
       registerActivity("talk");
     }catch(e){setError(e.userMsg||"Problema al enviar. Intenta de nuevo.");setMessages(m=>m.slice(0,-1));setInput(text);}
@@ -1839,7 +1866,7 @@ function Talk({state,registerActivity}){
                 {listening?"⏹":"🎤"}
               </button>
             )}
-            <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
+            <textarea value={input} onChange={e=>setInput(e.target.value)}
               placeholder={voiceMode?(listening?"Escuchando… habla en inglés":"Toca el micrófono y habla…"):"Write your reply in English…"} rows={2}
               style={{flex:1,border:"none",resize:"none",fontSize:16,outline:"none",background:"transparent",fontFamily:FEN,color:C.ink}}/>
             <button onClick={send} disabled={loading||!input.trim()}
@@ -3258,6 +3285,9 @@ function Settings({state,save,onAIChanged,onThemeChange}){
   // ── Recordatorio diario ──
   const [reminder,setReminder]=useState(()=>{try{return JSON.parse(localStorage.getItem("fluido-reminder")||"null")||{enabled:false,time:"20:00"};}catch(e){return{enabled:false,time:"20:00"};}});
   const saveReminder=(r)=>{setReminder(r);try{localStorage.setItem("fluido-reminder",JSON.stringify(r));localStorage.removeItem("fluido-reminder-last");}catch(e){}};
+
+  // ── Sesión de estudio automática ──
+  const [autoSession,setAutoSession]=useState(isAutoSession());
   const toggleReminder=async()=>{
     if(!reminder.enabled){
       if(!("Notification" in window)){alert("Tu navegador no soporta notificaciones.");return;}
@@ -3379,6 +3409,20 @@ function Settings({state,save,onAIChanged,onThemeChange}){
             </button>
           </div>
         )}
+      </div>
+
+      {/* --- SESIÓN DE ESTUDIO AUTOMÁTICA --- */}
+      <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+          <div>
+            <p style={{fontWeight:600,marginBottom:2}}>🎓 Sesión de estudio automática</p>
+            <p style={{fontSize:13,color:C.inkSoft,margin:0}}>Si está activada, Fluido empieza a tomar notas solo al abrir la app, y al salir o pasar a segundo plano arma tu cheat sheet automáticamente (si hubo algo que anotar). Con esto en OFF, la sesión sigue siendo manual desde el botón 🎓.</p>
+          </div>
+          <button onClick={()=>setAutoSession(v=>{const nv=!v;saveAutoSession(nv);return nv;})}
+            style={{flexShrink:0,padding:"9px 16px",borderRadius:999,border:"none",background:autoSession?C.green:C.paper,color:autoSession?"#fff":C.inkSoft,fontWeight:700,fontSize:13,boxShadow:autoSession?"none":`inset 0 0 0 1.5px ${C.line}`}}>
+            {autoSession?"ON":"OFF"}
+          </button>
+        </div>
       </div>
 
       {/* --- TEMA --- */}
