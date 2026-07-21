@@ -4369,6 +4369,8 @@ function SpeedGame({registerActivity,state}){
   const [picked,setPicked]=useState(null); // {en, correct} feedback breve
   const [streak,setStreak]=useState(0);
   const [newRecord,setNewRecord]=useState(false);
+  const [misses,setMisses]=useState([]); // palabras falladas en la partida
+  const [sheet,setSheet]=useState(null);
   const {speak}=useSpeech();
   const timerRef=useRef(null);
 
@@ -4380,7 +4382,7 @@ function SpeedGame({registerActivity,state}){
   };
 
   const start=()=>{
-    setScore(0);setStreak(0);setNewRecord(false);setTimeLeft(SPEED_DURATION);setPicked(null);
+    setScore(0);setStreak(0);setNewRecord(false);setTimeLeft(SPEED_DURATION);setPicked(null);setMisses([]);setSheet(null);
     setRound(makeSpeedRound(allWords));setPhase("playing");
     clearInterval(timerRef.current);
     timerRef.current=setInterval(()=>{
@@ -4400,7 +4402,12 @@ function SpeedGame({registerActivity,state}){
     const correct=opt.en===round.target.en;
     setPicked({en:opt.en,correct});
     if(correct){ setScore(s=>s+1); setStreak(s=>s+1); }
-    else{ setStreak(0); }
+    else{
+      setStreak(0);
+      // Registra la palabra fallada: en la sesión de estudio y para el cheat sheet.
+      setMisses(m=>m.some(x=>x.en===round.target.en)?m:[...m,{en:round.target.en,es:round.target.es}]);
+      sesNote("⏱️ Juego",{head:round.target.en,sub:round.target.es,note:"palabra fallada"});
+    }
     setTimeout(()=>{ setPicked(null); setRound(makeSpeedRound(allWords)); },420);
   };
 
@@ -4436,7 +4443,14 @@ function SpeedGame({registerActivity,state}){
           </div>
         </div>
         <BigButton onClick={start}>🔁 Jugar de nuevo</BigButton>
+        {misses.length>0&&(
+          <button onClick={()=>setSheet(misses.map(w=>({head:w.en,sub:w.es,note:"palabra que fallaste"})))}
+            style={{marginTop:10,width:"100%",padding:"12px",borderRadius:14,border:`1.5px dashed ${C.green}`,background:"transparent",color:C.green,fontWeight:700,fontSize:14}}>
+            📋 Cheat sheet de las {misses.length} que fallaste
+          </button>
+        )}
         <button onClick={()=>setPhase("idle")} style={{marginTop:10,width:"100%",padding:"12px",borderRadius:14,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:600,fontSize:14}}>Volver</button>
+        {sheet&&<CheatSheet title="Cheat sheet · Palabras falladas" items={sheet} level={state.level} withTips={true} onClose={()=>setSheet(null)}/>}
       </div>
     );
   }
