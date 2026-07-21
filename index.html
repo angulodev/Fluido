@@ -4370,26 +4370,34 @@ function makeSpeedRound(allWords,cfg,blockOf){
 function Games({registerActivity,state}){
   const [game,setGame]=useState(null); // null = menú · "speed" · "audio"
   const GAMES=[
-    {id:"speed",emoji:"⏱️",title:"Contrarreloj",desc:"Traduce a máxima velocidad contra el reloj."},
-    {id:"audio",emoji:"🎧",title:"Escucha y elige",desc:"Oye la palabra en inglés y elige su significado."},
+    {id:"speed",emoji:"⏱️",title:"Contrarreloj",desc:"Traduce a máxima velocidad contra el reloj.",
+      accent:C.blue,soft:C.blueSoft,record:()=>Math.max(loadSpeedBest("easy"),loadSpeedBest("medium"),loadSpeedBest("hard")),recordLabel:"récord"},
+    {id:"audio",emoji:"🎧",title:"Escucha y elige",desc:"Oye la palabra en inglés y elige su significado.",
+      accent:C.green,soft:C.greenSoft,record:()=>loadAudioBest(),recordLabel:`de ${AUDIO_ROUNDS}`},
   ];
-  if(game==="speed") return <div><button onClick={()=>setGame(null)} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,padding:"0 0 10px"}}>← Juegos</button><SpeedGame registerActivity={registerActivity} state={state}/></div>;
-  if(game==="audio") return <div><button onClick={()=>setGame(null)} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,padding:"0 0 10px"}}>← Juegos</button><AudioGame registerActivity={registerActivity} state={state}/></div>;
+  const back=<button onClick={()=>setGame(null)} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,padding:"0 0 10px"}}>← Juegos</button>;
+  if(game==="speed") return <div>{back}<SpeedGame registerActivity={registerActivity} state={state}/></div>;
+  if(game==="audio") return <div>{back}<AudioGame registerActivity={registerActivity} state={state}/></div>;
   return(
     <div className="fadein">
-      <p style={{fontSize:14,color:C.inkSoft,margin:"0 0 14px"}}>Elige un juego para practicar vocabulario de forma interactiva.</p>
-      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        {GAMES.map(g=>(
-          <button key={g.id} onClick={()=>setGame(g.id)}
-            style={{display:"flex",alignItems:"center",gap:14,padding:"16px",borderRadius:16,border:`1.5px solid ${C.line}`,background:C.card,textAlign:"left"}}>
-            <span style={{fontSize:30}}>{g.emoji}</span>
-            <span>
-              <span style={{display:"block",fontWeight:800,fontSize:16,color:C.ink}}>{g.title}</span>
-              <span style={{display:"block",fontSize:13,color:C.inkSoft}}>{g.desc}</span>
-            </span>
-          </button>
-        ))}
+      <p style={{fontSize:14,color:C.inkSoft,margin:"0 0 16px"}}>Elige un juego para practicar vocabulario de forma interactiva.</p>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        {GAMES.map(g=>{
+          const rec=g.record();
+          return(
+            <button key={g.id} onClick={()=>setGame(g.id)}
+              style={{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:8,padding:"18px 16px",borderRadius:18,border:`1.5px solid ${C.line}`,background:C.card,textAlign:"left",minHeight:172,position:"relative",overflow:"hidden"}}>
+              <span style={{width:52,height:52,borderRadius:14,background:g.soft,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>{g.emoji}</span>
+              <span style={{display:"block",fontWeight:800,fontSize:16,color:C.ink,lineHeight:1.2}}>{g.title}</span>
+              <span style={{display:"block",fontSize:12,color:C.inkSoft,lineHeight:1.35,flex:1}}>{g.desc}</span>
+              <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:g.accent,background:g.soft,borderRadius:999,padding:"4px 10px"}}>
+                🏆 {rec} {g.recordLabel}
+              </span>
+            </button>
+          );
+        })}
       </div>
+      <p style={{fontSize:11,color:C.inkSoft,textAlign:"center",margin:"16px 0 0"}}>Más juegos próximamente ✨</p>
     </div>
   );
 }
