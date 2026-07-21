@@ -4389,6 +4389,7 @@ function SpeedGame({registerActivity,state}){
   const [newRecord,setNewRecord]=useState(false);
   const [misses,setMisses]=useState([]);
   const [sheet,setSheet]=useState(null);
+  const [confirmQuit,setConfirmQuit]=useState(false);
   const {speak}=useSpeech();
   const timerRef=useRef(null);
 
@@ -4405,7 +4406,7 @@ function SpeedGame({registerActivity,state}){
   };
 
   const start=()=>{
-    setScore(0);setStreak(0);setNewRecord(false);setTimeLeft(cfg.duration);setPicked(null);setMisses([]);setSheet(null);
+    setScore(0);setStreak(0);setNewRecord(false);setTimeLeft(cfg.duration);setPicked(null);setMisses([]);setSheet(null);setConfirmQuit(false);
     setRound(makeSpeedRound(allWords,cfg,blockOf));setPhase("playing");
     clearInterval(timerRef.current);
     timerRef.current=setInterval(()=>{
@@ -4525,9 +4526,26 @@ function SpeedGame({registerActivity,state}){
         })}
       </div>
 
-      <button onClick={quit} style={{width:"100%",marginTop:14,padding:"11px",borderRadius:12,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:600,fontSize:13}}>
-        ✕ Abandonar partida
-      </button>
+      <div style={{marginTop:22,paddingTop:16,borderTop:`1px solid ${C.line}`}}>
+        {!confirmQuit?(
+          <button onClick={()=>setConfirmQuit(true)} style={{width:"100%",padding:"11px",borderRadius:12,border:"none",background:"transparent",color:C.coral,fontWeight:600,fontSize:13}}>
+            ✕ Abandonar partida
+          </button>
+        ):(
+          <div className="fadein" style={{background:C.coralSoft,border:`1.5px solid ${C.coral}`,borderRadius:14,padding:14,textAlign:"center"}}>
+            <p style={{margin:"0 0 10px",fontSize:14,fontWeight:600,color:C.ink}}>¿Seguro que quieres abandonar?</p>
+            <p style={{margin:"0 0 12px",fontSize:12,color:C.inkSoft}}>Perderás el progreso de esta partida.</p>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>setConfirmQuit(false)} style={{flex:1,padding:"11px",borderRadius:10,border:`1.5px solid ${C.line}`,background:C.card,color:C.ink,fontWeight:600,fontSize:13}}>
+                Seguir jugando
+              </button>
+              <button onClick={quit} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:C.coral,color:"#fff",fontWeight:700,fontSize:13}}>
+                Sí, abandonar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
