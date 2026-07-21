@@ -659,12 +659,12 @@ function Setup({onDone}){
   // ── Paso 1: cómo funciona (IA) y privacidad ──
   if(intro===1) return(
     <div className="fadein">
-      <h2 style={{fontSize:26,fontWeight:700,margin:"18px 0 14px"}}>✨ Todo se crea para ti, con IA</h2>
+      <h2 style={{fontSize:26,fontWeight:800,margin:"18px 0 14px"}}>✨ Todo se crea para ti, con IA</h2>
       <p style={{fontSize:15,lineHeight:1.7,marginBottom:14}}>Fluido no trae lecciones enlatadas: los diálogos, historias, conversaciones y correcciones se <strong>generan al momento con inteligencia artificial</strong>, según tu nivel, tu trabajo y tus intereses.</p>
       <p style={{fontSize:15,lineHeight:1.7,marginBottom:14}}>Para eso necesita conectarse a un proveedor de IA <strong>con tu propia clave</strong> (hay opción gratuita). En el siguiente paso te mostramos cómo obtenerla en 2 minutos.</p>
       <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:14,padding:"14px 16px",marginBottom:8}}>
         <p style={{fontWeight:700,fontSize:14,marginBottom:8}}>🔒 Tu privacidad, en corto</p>
-        <ul style={{margin:0,paddingLeft:18,fontSize:13.5,lineHeight:1.8,color:C.inkSoft}}>
+        <ul style={{margin:0,paddingLeft:18,fontSize:14,lineHeight:1.8,color:C.inkSoft}}>
           <li>Tu clave se guarda <strong>solo en este navegador</strong> (localStorage). Fluido no tiene servidores: nada se envía a nadie más.</li>
           <li>Se usa únicamente para hablar directo con el proveedor que TÚ elijas (Google, Anthropic, etc.).</li>
           <li>Tu progreso también vive solo en tu dispositivo, con respaldo exportable.</li>
@@ -945,7 +945,7 @@ function Home({state,save,go}){
       )}
       <DailyReview state={state} onStart={()=>setMixOpen(true)}/>
       <div style={{marginTop:20}}>
-        <p style={{fontSize:13,color:C.inkSoft,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Práctica rápida</p>
+        <p style={{fontSize:12,color:C.inkSoft,letterSpacing:1.2,textTransform:"uppercase",fontWeight:700,marginBottom:8}}>Práctica rápida</p>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
           {[{id:"talk",e:"💬",l:"Conversar",bg:C.blueSoft},
             {id:"listen",e:"🎧",l:"Escuchar",bg:C.greenSoft},
@@ -968,7 +968,7 @@ function Home({state,save,go}){
         </button>
       )}
       {csOpen&&<SheetHistory level={state.level} onClose={()=>setCsOpen(false)}/>}
-        <p style={{fontSize:13,color:C.inkSoft,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Misiones de hoy</p>
+        <p style={{fontSize:12,color:C.inkSoft,letterSpacing:1.2,textTransform:"uppercase",fontWeight:700,marginBottom:8}}>Misiones de hoy</p>
         <div style={{display:"grid",gridTemplateColumns:desktop?"1fr 1fr":"1fr",gap:desktop?10:0}}>
         {goals.map(g=>{
           const pct=Math.min(100,Math.round((g.done/g.target)*100)); const done=g.done>=g.target;
@@ -1127,10 +1127,10 @@ function MixedReview({state,save,onClose}){
         {card?(
           <div className="fadein" style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:18,padding:24,minHeight:220,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
             <div style={{textAlign:"center"}}>
-              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5}}>{card.icon} {card.type==="phrase"?"Frase":card.type==="verb"?"Verbo":"Palabra"} · {idx+1}/{queue.length}{silent&&<span> · 🔇</span>}</p>
+              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2}}>{card.icon} {card.type==="phrase"?"Frase":card.type==="verb"?"Verbo":"Palabra"} · {idx+1}/{queue.length}{silent&&<span> · 🔇</span>}</p>
               <p style={{fontSize:24,fontWeight:700,margin:"16px 0 6px",color:C.ink}}>{card.front}</p>
               {!silent&&flipped&&(
-                <p className="fadein" style={{fontSize:26,fontFamily:"'Newsreader',Georgia,serif",margin:"6px 0"}}>
+                <p className="fadein" style={{fontSize:26,fontFamily:FEN,margin:"6px 0"}}>
                   <span className="hl">{card.back}</span>
                   <button onClick={()=>speak(card.back)} aria-label="Escuchar" style={{border:"none",background:"transparent",fontSize:20,marginLeft:8}}>🔊</button>
                 </p>
@@ -1144,7 +1144,7 @@ function MixedReview({state,save,onClose}){
                 <p style={{fontSize:13,color:C.inkSoft,textAlign:"center",margin:"0 0 8px"}}>Toca las palabras para armar la frase — toca una en la frase para quitarla:</p>
                 <div style={{textAlign:"center",margin:"0 0 12px"}}>
                   <button onClick={()=>speak(card.back)}
-                    style={{padding:"7px 13px",borderRadius:999,border:`1.5px solid ${C.line}`,background:C.card,color:C.inkSoft,fontSize:12.5,fontWeight:700}}>🔊 Escuchar la frase</button>
+                    style={{padding:"7px 13px",borderRadius:999,border:`1.5px solid ${C.line}`,background:C.card,color:C.inkSoft,fontSize:13,fontWeight:700}}>🔊 Escuchar la frase</button>
                 </div>
                 <div style={{minHeight:44,background:C.paper,borderRadius:12,padding:"8px 10px",marginBottom:10,textAlign:"center",display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center",alignItems:"center"}}>
                   {built.length?built.map((x,p)=>(
@@ -1169,7 +1169,7 @@ function MixedReview({state,save,onClose}){
                 )}
                 <p style={{textAlign:"center",margin:"12px 0 0"}}>
                   <button onClick={()=>setAnswered({correct:false,skipped:true})}
-                    style={{border:"none",background:"transparent",color:C.inkSoft,fontSize:12.5,fontWeight:600,textDecoration:"underline dotted"}}>🤷 No lo sé — mostrar respuesta</button>
+                    style={{border:"none",background:"transparent",color:C.inkSoft,fontSize:13,fontWeight:600,textDecoration:"underline dotted"}}>🤷 No lo sé — mostrar respuesta</button>
                 </p>
               </div>
             )}
@@ -1178,7 +1178,7 @@ function MixedReview({state,save,onClose}){
                 <p style={{fontSize:13,color:C.inkSoft,textAlign:"center",margin:"0 0 8px"}}>¿Cuál es la traducción correcta?</p>
                 <div style={{textAlign:"center",margin:"0 0 12px"}}>
                   <button onClick={()=>speak(card.back)}
-                    style={{padding:"7px 13px",borderRadius:999,border:`1.5px solid ${C.line}`,background:C.card,color:C.inkSoft,fontSize:12.5,fontWeight:700}}>🔊 Escuchar la frase</button>
+                    style={{padding:"7px 13px",borderRadius:999,border:`1.5px solid ${C.line}`,background:C.card,color:C.inkSoft,fontSize:13,fontWeight:700}}>🔊 Escuchar la frase</button>
                 </div>
                 <div style={{display:"grid",gap:8}}>
                   {choiceOptions.map((opt,i)=>(
@@ -1190,7 +1190,7 @@ function MixedReview({state,save,onClose}){
                 </div>
                 <p style={{textAlign:"center",margin:"12px 0 0"}}>
                   <button onClick={()=>setAnswered({correct:false,skipped:true})}
-                    style={{border:"none",background:"transparent",color:C.inkSoft,fontSize:12.5,fontWeight:600,textDecoration:"underline dotted"}}>🤷 No lo sé — mostrar respuesta</button>
+                    style={{border:"none",background:"transparent",color:C.inkSoft,fontSize:13,fontWeight:600,textDecoration:"underline dotted"}}>🤷 No lo sé — mostrar respuesta</button>
                 </p>
               </div>
             )}
@@ -1210,7 +1210,7 @@ function MixedReview({state,save,onClose}){
                     })()}
                   </p>
                 )}
-                <p style={{textAlign:"center",fontSize:19,fontFamily:FEN,margin:"0 0 4px"}}><span className="hl">{card.back}</span>
+                <p style={{textAlign:"center",fontSize:20,fontFamily:FEN,margin:"0 0 4px"}}><span className="hl">{card.back}</span>
                   <button onClick={()=>speak(card.back)} aria-label="Escuchar" style={{border:"none",background:"transparent",fontSize:18,marginLeft:8}}>🔊</button>
                 </p>
                 {card.note&&<p style={{fontSize:13,color:C.inkSoft,textAlign:"center",margin:"0 0 8px"}}>{card.note}</p>}
@@ -1459,12 +1459,12 @@ function CheatSheet({title,items,level,withTips,preExtra,sheetId,onClose}){
   };
   const Section=({sec})=>sec.items.length?(
     <div style={{marginBottom:14}}>
-      <p style={{fontSize:12,fontWeight:800,letterSpacing:1.2,textTransform:"uppercase",color:sec.color,margin:"0 0 8px"}}>{sec.icon} {sec.label}</p>
+      <p style={{fontSize:12,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",color:sec.color,margin:"0 0 8px"}}>{sec.icon} {sec.label}</p>
       {sec.items.map((it,i)=>(
         <div key={i} style={{borderLeft:`4px solid ${sec.color}`,padding:"5px 0 5px 12px",marginBottom:10}}>
           <p style={{margin:0,fontFamily:FEN,fontSize:16,fontWeight:700,color:C.ink}}>{it.head}</p>
-          {it.sub&&<p style={{margin:"2px 0 0",fontSize:13.5,color:C.inkSoft,fontStyle:"italic"}}>{it.sub}</p>}
-          {it.note&&<p style={{margin:"3px 0 0",fontSize:12.5,color:C.inkSoft}}>{it.note}</p>}
+          {it.sub&&<p style={{margin:"2px 0 0",fontSize:14,color:C.inkSoft,fontStyle:"italic"}}>{it.sub}</p>}
+          {it.note&&<p style={{margin:"3px 0 0",fontSize:13,color:C.inkSoft}}>{it.note}</p>}
         </div>
       ))}
     </div>
@@ -1477,7 +1477,7 @@ function CheatSheet({title,items,level,withTips,preExtra,sheetId,onClose}){
           <strong style={{fontSize:17}}>📋 {title}</strong>
           <button onClick={onClose} aria-label="Cerrar" style={{border:"none",background:"transparent",fontSize:20,color:C.inkSoft,padding:4}}>✕</button>
         </div>
-        <p style={{fontSize:12.5,color:C.inkSoft,margin:"0 0 14px"}}>Tu ficha de estudio — compártela o guárdala como imagen.</p>
+        <p style={{fontSize:13,color:C.inkSoft,margin:"0 0 14px"}}>Tu ficha de estudio — compártela o guárdala como imagen.</p>
         {allSections.map((sec,i)=><Section key={i} sec={sec}/>)}
         {tipsLoading&&<p style={{fontSize:13,color:C.inkSoft,margin:"0 0 12px"}}>✨ Generando tips y material de repaso…</p>}
         <div style={{display:"flex",gap:8}}>
@@ -1537,22 +1537,22 @@ function SessionFab({level}){
           {!ses?(
             <div>
               <p style={{margin:"2px 2px 8px",fontWeight:800,fontSize:15,color:C.ink}}>🎓 Sesión de estudio</p>
-              <p style={{margin:"0 2px 7px",fontSize:12.5,color:C.inkSoft,lineHeight:1.55}}>Inicia tu sesión y <strong style={{color:C.ink}}>Fluido toma notas por ti</strong> mientras practicas en cualquier módulo: frases clave de los audios, tus correcciones de escritura y todo lo que te cueste en frases, verbos y vocab.</p>
-              <p style={{margin:"0 2px 11px",fontSize:12.5,color:C.inkSoft,lineHeight:1.55}}>Al finalizar recibes un <strong style={{color:C.ink}}>📋 resumen completo con tips de IA</strong>, listo para descargar o compartir — y queda guardado en tu historial.</p>
+              <p style={{margin:"0 2px 7px",fontSize:13,color:C.inkSoft,lineHeight:1.55}}>Inicia tu sesión y <strong style={{color:C.ink}}>Fluido toma notas por ti</strong> mientras practicas en cualquier módulo: frases clave de los audios, tus correcciones de escritura y todo lo que te cueste en frases, verbos y vocab.</p>
+              <p style={{margin:"0 2px 11px",fontSize:13,color:C.inkSoft,lineHeight:1.55}}>Al finalizar recibes un <strong style={{color:C.ink}}>📋 resumen completo con tips de IA</strong>, listo para descargar o compartir — y queda guardado en tu historial.</p>
               <button onClick={()=>{sesStart();closeMenu();}}
                 style={{width:"100%",padding:"12px 12px",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontWeight:800,fontSize:14,marginBottom:6,boxShadow:`0 6px 16px ${C.blue}55`}}>
                 ▶️ Iniciar sesión
               </button>
               <button onClick={closeMenu}
-                style={{width:"100%",padding:"9px 12px",borderRadius:12,border:"none",background:"transparent",color:C.inkSoft,fontSize:12.5,textDecoration:"underline"}}>
+                style={{width:"100%",padding:"9px 12px",borderRadius:12,border:"none",background:"transparent",color:C.inkSoft,fontSize:13,textDecoration:"underline"}}>
                 Ahora no
               </button>
             </div>
           ):confirmDiscard?(
             <div className="fadein">
-              <p style={{margin:"2px 2px 10px",fontSize:13.5,color:C.ink,lineHeight:1.5}}>¿Descartar la sesión? Se perderán <strong>{n} nota{n===1?"":"s"}</strong> y no habrá resumen.</p>
+              <p style={{margin:"2px 2px 10px",fontSize:14,color:C.ink,lineHeight:1.5}}>¿Descartar la sesión? Se perderán <strong>{n} nota{n===1?"":"s"}</strong> y no habrá resumen.</p>
               <button onClick={()=>{sesEnd();closeMenu();}}
-                style={{width:"100%",padding:"11px 12px",borderRadius:12,border:"none",background:C.coral,color:"#fff",fontWeight:700,fontSize:13.5,marginBottom:6}}>
+                style={{width:"100%",padding:"11px 12px",borderRadius:12,border:"none",background:C.coral,color:"#fff",fontWeight:700,fontSize:14,marginBottom:6}}>
                 Sí, descartar
               </button>
               <button onClick={()=>setConfirmDiscard(false)}
@@ -1562,9 +1562,9 @@ function SessionFab({level}){
             </div>
           ):(
             <div>
-              <p style={{margin:"2px 4px 8px",fontSize:12.5,color:C.inkSoft}}>Sesión activa · {mins} min · {n} nota{n===1?"":"s"}</p>
+              <p style={{margin:"2px 4px 8px",fontSize:13,color:C.inkSoft}}>Sesión activa · {mins} min · {n} nota{n===1?"":"s"}</p>
               <button onClick={n?finish:undefined} disabled={!n}
-                style={{width:"100%",padding:"11px 12px",borderRadius:12,border:"none",background:n?C.green:C.paper,color:n?"#fff":C.inkSoft,fontWeight:700,fontSize:13.5,marginBottom:6,opacity:n?1:0.7}}>
+                style={{width:"100%",padding:"11px 12px",borderRadius:12,border:"none",background:n?C.green:C.paper,color:n?"#fff":C.inkSoft,fontWeight:700,fontSize:14,marginBottom:6,opacity:n?1:0.7}}>
                 {n?"📋 Finalizar y ver resumen":"Practica algo primero 🙂"}
               </button>
               <button onClick={()=>setConfirmDiscard(true)}
@@ -1572,7 +1572,7 @@ function SessionFab({level}){
                 ✕ Descartar sesión
               </button>
               <button onClick={closeMenu}
-                style={{width:"100%",padding:"9px 12px",borderRadius:12,border:"none",background:"transparent",color:C.inkSoft,fontSize:12.5,textDecoration:"underline"}}>
+                style={{width:"100%",padding:"9px 12px",borderRadius:12,border:"none",background:"transparent",color:C.inkSoft,fontSize:13,textDecoration:"underline"}}>
                 Seguir practicando
               </button>
             </div>
@@ -1611,7 +1611,7 @@ function SheetHistory({level,onClose}){
           <button onClick={onClose} aria-label="Cerrar" style={{border:"none",background:"transparent",fontSize:20,color:C.inkSoft,padding:4}}>✕</button>
         </div>
         {list.length===0&&(
-          <p style={{fontSize:13.5,color:C.inkSoft,lineHeight:1.6}}>Aún no tienes cheat sheets guardados. Se archivan solos cada vez que creas uno desde Escribir, Escuchar, el Repaso del día o al finalizar una sesión 🎓 — vuelve aquí para reabrirlos y compartirlos cuando quieras.</p>
+          <p style={{fontSize:14,color:C.inkSoft,lineHeight:1.6}}>Aún no tienes cheat sheets guardados. Se archivan solos cada vez que creas uno desde Escribir, Escuchar, el Repaso del día o al finalizar una sesión 🎓 — vuelve aquí para reabrirlos y compartirlos cuando quieras.</p>
         )}
         {list.map(rec=>(
           <div key={rec.id} style={{display:"flex",alignItems:"center",gap:8,background:C.card,border:`1px solid ${C.line}`,borderRadius:14,padding:"11px 12px",marginBottom:8}}>
@@ -1637,7 +1637,7 @@ function ModuleInfo({id,points}){
   const dismiss=()=>{setOpen(false);try{localStorage.setItem(KEY,"1");}catch(e){}};
   if(!open) return(
     <button onClick={()=>setOpen(true)}
-      style={{margin:"0 0 12px",padding:0,border:"none",background:"transparent",color:C.inkSoft,fontSize:12.5,fontWeight:600,textDecoration:"underline dotted"}}>
+      style={{margin:"0 0 12px",padding:0,border:"none",background:"transparent",color:C.inkSoft,fontSize:13,fontWeight:600,textDecoration:"underline dotted"}}>
       ℹ️ ¿Cómo funciona este módulo?
     </button>);
   return(
@@ -1645,7 +1645,7 @@ function ModuleInfo({id,points}){
       {points.map((p,i)=>(
         <div key={i} style={{display:"flex",gap:11,alignItems:"flex-start",marginBottom:i<points.length-1?11:0}}>
           <span style={{fontSize:18,flexShrink:0,lineHeight:1.3}}>{p[0]}</span>
-          <span style={{fontSize:13.5,lineHeight:1.55,color:C.ink}}>{p[1]}</span>
+          <span style={{fontSize:14,lineHeight:1.55,color:C.ink}}>{p[1]}</span>
         </div>
       ))}
       <button onClick={dismiss}
@@ -1772,7 +1772,7 @@ function Practice({state,registerActivity}){
   ];
   return(
     <div className="fadein">
-      <h2 style={{fontSize:24,fontWeight:700,marginBottom:4}}>Práctica</h2>
+      <h2 style={{fontSize:26,fontWeight:800,marginBottom:4}}>Práctica</h2>
       <p style={{fontSize:14,color:C.inkSoft,margin:"0 0 16px"}}>Produce inglés: habla en situaciones reales o construye oraciones paso a paso.</p>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         {CARDS.map(c=>(
@@ -1846,7 +1846,7 @@ function Talk({state,registerActivity}){
   const lastFbIdx=messages.reduce((a,m,i)=>m.feedback?i:a,-1);
   return(
     <div className="fadein" style={{display:"flex",flexDirection:"column",minHeight:"calc(100vh - 140px)"}}>
-      <h2 style={{fontSize:24,fontWeight:700,marginBottom:4}}>Conversar</h2>
+      <h2 style={{fontSize:26,fontWeight:800,marginBottom:4}}>Conversar</h2>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:14,flexWrap:"wrap"}}>
         <p style={{fontSize:14,color:C.inkSoft,margin:0}}>{voiceMode?"Habla en inglés con el micrófono. Corrijo lo que diga tu voz.":"Escribe en inglés como puedas. Aquí "}{!voiceMode&&<span className="hl">equivocarse es el método</span>}{!voiceMode&&"."}</p>
         <ModuleInfo id="talk" points={[
@@ -1879,7 +1879,7 @@ function Talk({state,registerActivity}){
               </button>
               {(()=>{const pt=loadPersonalTopics().topics;if(!pt.length)return null;return(
                 <div style={{marginTop:14}}>
-                  <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"0 0 8px"}}>✨ O conversa sobre tus temas</p>
+                  <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2,margin:"0 0 8px"}}>✨ O conversa sobre tus temas</p>
                   <ChipsWithSheet items={pt} onPick={t=>newScenario(t.en)} limit={4} title="✨ Tus temas"/>
                 </div>);})()}
             </div>
@@ -1912,7 +1912,7 @@ function Talk({state,registerActivity}){
               {m.role==="them"&&<button onClick={()=>speak(m.text)} aria-label="Escuchar" style={{border:"none",background:"transparent",fontSize:16,marginLeft:6}}>🔊</button>}
               {m.role==="them"&&m.es&&(
                 revealed[i]
-                  ? <div className="fadein" style={{fontSize:12.5,color:C.inkSoft,fontStyle:"italic",marginTop:5,fontFamily:FUI,borderTop:`1px dashed ${C.line}`,paddingTop:5}}>🇪🇸 {m.es}</div>
+                  ? <div className="fadein" style={{fontSize:13,color:C.inkSoft,fontStyle:"italic",marginTop:5,fontFamily:FUI,borderTop:`1px dashed ${C.line}`,paddingTop:5}}>🇪🇸 {m.es}</div>
                   : <button onClick={()=>setRevealed(r=>({...r,[i]:true}))}
                       style={{display:"inline-flex",alignItems:"center",gap:4,marginTop:6,padding:"4px 10px",borderRadius:999,border:`1px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:600,fontSize:11,fontFamily:FUI}}>
                       🇪🇸 Traducción
@@ -1966,9 +1966,9 @@ function Feedback({fb,collapsed}){
   return(
     <div className="fadein" style={{maxWidth:"92%",marginLeft:"auto",marginTop:6,background:C.card,border:`1px dashed ${C.line}`,borderRadius:12,padding:"10px 12px",fontSize:14}}>
       {hasErrors&&fb.errors.map((e,i)=>(<p key={i} style={{margin:"0 0 6px",lineHeight:1.6}}><span className="hl-red" style={{fontFamily:FEN}}>{e.wrong}</span>{" → "}<span className="hl-green" style={{fontFamily:FEN}}>{e.right}</span><br/><span style={{color:C.inkSoft,fontSize:13}}>{e.why_es}</span></p>))}
-      {fb.natural_en&&<div style={{margin:"8px 0 0"}}><span style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Versión natural</span><div style={{marginTop:4,padding:"8px 12px",background:C.blueSoft,borderRadius:10,fontFamily:FEN,fontSize:16,color:C.ink,borderLeft:`3px solid ${C.blue}`}}>{fb.natural_en}</div></div>}
+      {fb.natural_en&&<div style={{margin:"8px 0 0"}}><span style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2}}>Versión natural</span><div style={{marginTop:4,padding:"8px 12px",background:C.blueSoft,borderRadius:10,fontFamily:FEN,fontSize:16,color:C.ink,borderLeft:`3px solid ${C.blue}`}}>{fb.natural_en}</div></div>}
       {fb.tip_es&&<p style={{margin:"8px 0 0",fontSize:13,color:C.blue}}>💡 {fb.tip_es}</p>}
-      {collapsed&&<button onClick={()=>setOpen(false)} style={{marginTop:8,border:"none",background:"transparent",color:C.inkSoft,fontSize:11.5,textDecoration:"underline dotted",padding:0}}>− ocultar</button>}
+      {collapsed&&<button onClick={()=>setOpen(false)} style={{marginTop:8,border:"none",background:"transparent",color:C.inkSoft,fontSize:12,textDecoration:"underline dotted",padding:0}}>− ocultar</button>}
     </div>
   );
 }
@@ -2017,7 +2017,7 @@ function Phrases({state,save,registerActivity,initialMode}){
   };
   return(
     <div className="fadein">
-      <h2 style={{fontSize:24,fontWeight:700,marginBottom:4}}>Vocabulario</h2>
+      <h2 style={{fontSize:26,fontWeight:800,marginBottom:4}}>Vocabulario</h2>
 
       {/* Menú de tarjetas — se muestra cuando no hay sección activa */}
       {!mode&&(()=>{
@@ -2062,11 +2062,11 @@ function Phrases({state,save,registerActivity,initialMode}){
       {card?(
         <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:18,padding:22,minHeight:220,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
           <div>
-            <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5}}>{flipped?"En inglés se dice":"¿Cómo dirías…?"}</p>
-            <p style={{fontSize:21,fontWeight:500,margin:"10px 0",lineHeight:1.4}}>{card.es}</p>
+            <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2}}>{flipped?"En inglés se dice":"¿Cómo dirías…?"}</p>
+            <p style={{fontSize:22,fontWeight:500,margin:"10px 0",lineHeight:1.4}}>{card.es}</p>
             {flipped&&(
               <div className="fadein">
-                <p style={{fontFamily:FEN,fontSize:23,margin:"6px 0",lineHeight:1.4}}>
+                <p style={{fontFamily:FEN,fontSize:22,margin:"6px 0",lineHeight:1.4}}>
                   <span className="hl">{card.en}</span>{" "}
                   <button onClick={()=>speak(card.en)} aria-label="Escuchar" style={{border:"none",background:"transparent",fontSize:20}}>🔊</button>
                 </p>
@@ -2396,7 +2396,7 @@ function FormulaPill({part}){
   const colorMap={subject:C.blue,aux:C.green,neg:C.coral,verb:C.ink,comp:C.inkSoft};
   const bgMap={subject:C.blueSoft,aux:C.greenSoft,neg:C.coralSoft,verb:C.line,comp:C.card};
   return(
-    <span style={{display:"inline-block",padding:"4px 10px",borderRadius:8,background:bgMap[part.t]||C.card,color:colorMap[part.t]||C.ink,fontWeight:700,fontSize:12.5,fontFamily:FUI}}>
+    <span style={{display:"inline-block",padding:"4px 10px",borderRadius:8,background:bgMap[part.t]||C.card,color:colorMap[part.t]||C.ink,fontWeight:700,fontSize:13,fontFamily:FUI}}>
       {part.l}
     </span>
   );
@@ -2414,8 +2414,8 @@ function FormulaCard({tenseId,typeId}){
           </React.Fragment>
         ))}
       </div>
-      <p style={{fontFamily:FEN,fontSize:14.5,color:C.ink,margin:"0 0 3px"}}>{f.example_en}</p>
-      <p style={{fontSize:12.5,color:C.inkSoft,fontStyle:"italic",margin:"0 0 8px"}}>{f.example_es}</p>
+      <p style={{fontFamily:FEN,fontSize:15,color:C.ink,margin:"0 0 3px"}}>{f.example_en}</p>
+      <p style={{fontSize:13,color:C.inkSoft,fontStyle:"italic",margin:"0 0 8px"}}>{f.example_es}</p>
       {f.verbHint&&<p style={{fontSize:12,color:C.inkSoft,margin:0,borderTop:`1px dashed ${C.line}`,paddingTop:8}}>💡 <strong>Sobre el verbo:</strong> {f.verbHint}</p>}
     </div>
   );
@@ -2570,7 +2570,7 @@ function Write({state,registerActivity}){
           const group=steps.filter(s=>s.tenseId===t.id);
           return(
             <div key={t.id} style={{marginBottom:14}}>
-              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,margin:"0 0 8px"}}>{t.label}</p>
+              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.2,fontWeight:700,margin:"0 0 8px"}}>{t.label}</p>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {group.map(s=>{
                   const gIdx=steps.findIndex(x=>x.id===s.id);
@@ -2601,14 +2601,14 @@ function Write({state,registerActivity}){
 
         {/* Modo libre */}
         <div style={{marginTop:8,paddingTop:16,borderTop:`1px dashed ${C.line}`}}>
-          <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"0 0 10px"}}>🎯 Práctica libre</p>
+          <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2,margin:"0 0 10px"}}>🎯 Práctica libre</p>
           {!showCustom?(
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               <button onClick={()=>newPrompt()} style={{padding:"12px 16px",borderRadius:12,border:`1.5px solid ${C.line}`,background:C.card,color:C.ink,fontWeight:600,fontSize:14,textAlign:"left"}}>✨ Escenario aleatorio</button>
               <button onClick={()=>setShowCustom(true)} style={{padding:"12px 16px",borderRadius:12,border:`1.5px solid ${C.line}`,background:C.card,color:C.ink,fontWeight:600,fontSize:14,textAlign:"left"}}>✏️ Proponer mi propio escenario</button>
               {(()=>{const pt=loadPersonalTopics().topics;if(!pt.length)return null;return(
                 <div style={{marginTop:6}}>
-                  <p style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"0 0 8px"}}>✨ O sobre tus temas</p>
+                  <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2,margin:"0 0 8px"}}>✨ O sobre tus temas</p>
                   <ChipsWithSheet items={pt} onPick={t=>newPrompt(t.en)} limit={4} title="✨ Tus temas"/>
                 </div>);})()}
             </div>
@@ -2646,7 +2646,7 @@ function Write({state,registerActivity}){
 
       {prompt&&(
         <div className="fadein" style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:18,padding:20}}>
-          <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,marginBottom:6}}>Escenario</p>
+          <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2,marginBottom:6}}>Escenario</p>
           <p style={{fontSize:18,fontWeight:700,marginBottom:prompt.example_hint_es?4:14}}>{prompt.prompt_es}</p>
           {prompt.example_hint_es&&<p style={{fontSize:13,color:C.inkSoft,fontStyle:"italic",marginBottom:14}}>💡 {prompt.example_hint_es}</p>}
 
@@ -2655,9 +2655,9 @@ function Write({state,registerActivity}){
               {/* En modo libre se puede elegir; en ruta el tipo/tiempo vienen fijos */}
               {!pathStep&&(
                 <>
-                  <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:6}}>Tipo de oración</p>
+                  <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.2,fontWeight:700,marginBottom:6}}>Tipo de oración</p>
                   <ChipRow options={SENTENCE_TYPES} value={sentenceType} onChange={v=>{setSentenceType(v);resetSentence();}}/>
-                  <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,margin:"14px 0 6px"}}>Tiempo verbal</p>
+                  <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.2,fontWeight:700,margin:"14px 0 6px"}}>Tiempo verbal</p>
                   <ChipRow options={availableTenses} value={activeTense} onChange={v=>{setTense(v);resetSentence();}}/>
                 </>
               )}
@@ -2672,7 +2672,7 @@ function Write({state,registerActivity}){
               </div>
 
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,margin:0}}>Tu oración</p>
+                <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.2,fontWeight:700,margin:0}}>Tu oración</p>
                 <button onClick={getIdeas} disabled={loadingIdeas}
                   style={{border:"none",background:"transparent",color:C.blue,fontSize:12,fontWeight:600,padding:0}}>
                   {loadingIdeas?"…":"💡 Dame ideas"}
@@ -2713,12 +2713,12 @@ function Write({state,registerActivity}){
                 </div>
               )}
               <div style={{background:C.paper,borderRadius:12,padding:"10px 14px",marginBottom:10}}>
-                <p style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Tu oración ({feedback.typeLabel} · {feedback.tenseLabel})</p>
+                <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2,marginBottom:4}}>Tu oración ({feedback.typeLabel} · {feedback.tenseLabel})</p>
                 <p style={{fontFamily:FEN,fontSize:15,color:C.inkSoft,lineHeight:1.5}}>{feedback.sentence}</p>
               </div>
               <div style={{background:C.greenSoft,borderRadius:12,padding:"10px 14px",marginBottom:12}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                  <p style={{fontSize:11,color:C.green,textTransform:"uppercase",letterSpacing:1,marginBottom:4,fontWeight:700}}>Versión corregida</p>
+                  <p style={{fontSize:12,color:C.green,textTransform:"uppercase",letterSpacing:1.2,marginBottom:4,fontWeight:700}}>Versión corregida</p>
                   <button onClick={()=>speak(feedback.corrected)} aria-label="Escuchar" style={{border:"none",background:"transparent",fontSize:17}}>🔊</button>
                 </div>
                 <p style={{margin:0,fontFamily:FEN,fontSize:16,fontWeight:600,color:C.ink,lineHeight:1.5}}>{feedback.corrected}</p>
@@ -2807,7 +2807,7 @@ function WeeklyActivity({history}){
   return(
     <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:16}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:12}}>
-        <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:0}}>Actividad últimos 7 días</p>
+        <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2,margin:0}}>Actividad últimos 7 días</p>
         <span style={{fontSize:12,color:C.inkSoft}}>{total} práctica{total===1?"":"s"}</span>
       </div>
       <div style={{display:"flex",alignItems:"flex-end",gap:8,height:74}}>
@@ -2837,11 +2837,11 @@ function LevelCheck({state,save,go}){
   return(
     <div className="fadein">
       <button onClick={()=>go("home")} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,marginBottom:14,padding:0}}>← Volver</button>
-      <h2 style={{fontSize:24,fontWeight:700,marginBottom:4}}>¿Debería cambiar de nivel?</h2>
+      <h2 style={{fontSize:26,fontWeight:800,marginBottom:4}}>¿Debería cambiar de nivel?</h2>
       <p style={{fontSize:14,color:C.inkSoft,marginBottom:18}}>Nivel actual: <strong style={{color:C.ink}}>{lvl.icon} {lvl.label}</strong></p>
 
       <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:16}}>
-        <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,marginBottom:14}}>Tu desempeño reciente (nivel {state.level})</p>
+        <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2,marginBottom:14}}>Tu desempeño reciente (nivel {state.level})</p>
         <LevelBar label="Comprensión auditiva (Escuchar)" pct={sig.listenPct} note={sig.listenPct===null?"Responde al menos 5 ejercicios en Escuchar para ver esta señal.":null}/>
         <LevelBar label="Producción oral (Conversar)" pct={sig.talkPct} note={sig.talkPct===null?"Envía al menos 5 mensajes en Conversar para ver esta señal.":null}/>
         <LevelBar label="Producción escrita (Escribir)" pct={sig.writePct} note={sig.writePct===null?"Corrige al menos 5 textos en Escribir para ver esta señal.":null}/>
@@ -2970,11 +2970,11 @@ function Story({state,registerActivity}){
         {error&&<p style={{fontSize:13,color:C.coral,marginTop:10,textAlign:"center"}}>{error}</p>}
         {personal.length>0&&(
           <div style={{marginTop:14}}>
-            <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"0 0 8px"}}>✨ Tus temas</p>
+            <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2,margin:"0 0 8px"}}>✨ Tus temas</p>
             <ChipsWithSheet items={personal} onPick={t=>startStory(t)} limit={4} title="✨ Tus temas"/>
           </div>
         )}
-        <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"14px 0 8px"}}>O elige una situación</p>
+        <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2,margin:"14px 0 8px"}}>O elige una situación</p>
         <ChipsWithSheet items={[...topicSugs,...LISTEN_TOPICS.filter(t=>!topicSugs.some(x=>x.id===t.id))]} onPick={t=>startStory(t)} limit={5} title="Elige una situación"/>
       </div>
     </div>
@@ -3008,7 +3008,7 @@ function Story({state,registerActivity}){
       {story.pages.map((p,pi)=>(
         <div key={pi} className="fadein" style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:0}}>Capítulo {pi+1}{pi===2?" · Final":""}</p>
+            <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2,margin:0}}>Capítulo {pi+1}{pi===2?" · Final":""}</p>
             <button onClick={()=>speak(p.sentences.map(s=>s.en).join(" "),{rate})} aria-label="Escuchar capítulo"
               style={{border:`1.5px solid ${C.blue}`,background:C.blueSoft,color:C.blue,borderRadius:999,padding:"6px 12px",fontSize:12,fontWeight:700}}>▶ Capítulo</button>
           </div>
@@ -3017,7 +3017,7 @@ function Story({state,registerActivity}){
             return(
               <div key={si} style={{marginBottom:shadow?12:6}}>
                 <p style={{margin:0,lineHeight:1.6}}>
-                  <span style={{fontFamily:FEN,fontSize:16.5}}>{s.en}</span>{" "}
+                  <span style={{fontFamily:FEN,fontSize:16}}>{s.en}</span>{" "}
                   <button onClick={()=>speak(s.en,{rate})} aria-label="Escuchar oración" style={{border:"none",background:"transparent",fontSize:15,padding:0}}>🔊</button>
                 </p>
                 {s.es&&(showEs[k]
@@ -3052,7 +3052,7 @@ function Story({state,registerActivity}){
         <div className="fadein">
           {story.key_phrase_en&&(
             <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:12}}>
-              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,marginBottom:6}}>Expresión para tu mochila</p>
+              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2,marginBottom:6}}>Expresión para tu mochila</p>
               <p style={{margin:0,fontSize:15}}><span className="hl" style={{fontFamily:FEN}}>{story.key_phrase_en}</span> — {story.key_phrase_es}
                 <button onClick={()=>speak(story.key_phrase_en,{rate})} style={{border:"none",background:"transparent",fontSize:15,marginLeft:6}}>🔊</button>
               </p>
@@ -3193,7 +3193,7 @@ function Listen({state,save,registerActivity}){
 
   return(
     <div className="fadein">
-      <h2 style={{fontSize:24,fontWeight:700,marginBottom:4}}>Escuchar</h2>
+      <h2 style={{fontSize:26,fontWeight:800,marginBottom:4}}>Escuchar</h2>
       <p style={{marginBottom:12,fontSize:14,color:C.inkSoft}}>Escucha primero <span className="hl">sin leer</span>. La transcripción se revela al final.</p>
       <ModuleInfo id="listen" points={[
         ["🎧",<>Entrena tu <strong>oído</strong> con diálogos generados a tu nivel exacto, sobre situaciones reales o <strong>tus temas</strong> personalizados.</>],
@@ -3206,7 +3206,7 @@ function Listen({state,save,registerActivity}){
           <BigButton onClick={()=>newExercise()}>🎲 Nuevo audio (sorpresa)</BigButton>
 
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"16px 0 8px"}}>
-            <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:0}}>✨ Tus temas</p>
+            <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2,margin:0}}>✨ Tus temas</p>
             {personal.topics.length>0&&(
               <button onClick={()=>setManageTopics(v=>!v)}
                 style={{border:"none",background:"transparent",color:manageTopics?C.blue:C.inkSoft,fontSize:12,fontWeight:700,textDecoration:"underline",padding:0}}>
@@ -3250,7 +3250,7 @@ function Listen({state,save,registerActivity}){
                   <ChipsWithSheet items={personal.topics} onPick={t=>newExercise(t)} limit={4} title="✨ Tus temas"/>
                   {!genLoading&&(
                     <button onClick={()=>setAddingTopic(v=>!v)}
-                      style={{marginTop:8,padding:"8px 13px",borderRadius:999,border:`1.5px dashed ${C.line}`,background:"transparent",color:C.inkSoft,fontSize:12.5,fontWeight:600}}>＋ Agregar tema propio</button>
+                      style={{marginTop:8,padding:"8px 13px",borderRadius:999,border:`1.5px dashed ${C.line}`,background:"transparent",color:C.inkSoft,fontSize:13,fontWeight:600}}>＋ Agregar tema propio</button>
                   )}
                 </div>
               )}
@@ -3266,7 +3266,7 @@ function Listen({state,save,registerActivity}){
             </div>
           )}
 
-          <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"14px 0 8px"}}>O elige una situación</p>
+          <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2,margin:"14px 0 8px"}}>O elige una situación</p>
           <ChipsWithSheet items={[...topicSugs,...LISTEN_TOPICS.filter(t=>!topicSugs.some(x=>x.id===t.id))]} onPick={t=>newExercise(t)} limit={5} title="Elige una situación"/>
         </div>
       )}
@@ -3363,7 +3363,7 @@ function Listen({state,save,registerActivity}){
                       {shadow&&<PronounceCheck target={d.line}/>}
                     </div>);})}
                   <div style={{borderTop:`1px dashed ${C.line}`,paddingTop:10,marginTop:10}}>
-                    <p style={{fontSize:13,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Expresión para tu mochila</p>
+                    <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2}}>Expresión para tu mochila</p>
                     <p style={{margin:"4px 0 0",fontFamily:FEN,fontSize:16}}><span className="hl">{exercise.key_phrase_en}</span><span style={{fontFamily:FUI,fontSize:13,color:C.inkSoft}}> — {exercise.key_phrase_es}</span></p>
                   </div>
                 </div>
@@ -3593,7 +3593,7 @@ function Settings({state,save,onAIChanged,onThemeChange}){
 
   return(
     <div className="fadein">
-      <h2 style={{fontSize:24,fontWeight:700,marginBottom:14}}>Ajustes</h2>
+      <h2 style={{fontSize:26,fontWeight:800,marginBottom:14}}>Ajustes</h2>
 
       {/* --- CHEAT SHEETS --- */}
       <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18,marginBottom:14}}>
@@ -3643,7 +3643,7 @@ function Settings({state,save,onAIChanged,onThemeChange}){
             <input type="time" value={reminder.time} onChange={e=>saveReminder({...reminder,time:e.target.value})}
               style={{padding:"8px 10px",borderRadius:10,border:`1.5px solid ${C.line}`,background:C.paper,color:C.ink,fontSize:14}}/>
             <button onClick={()=>{if(!("Notification" in window)||Notification.permission!=="granted"){alert("Primero activa el permiso de notificaciones.");return;}fluidoNotify("Fluido 🇬🇧","🔔 ¡Prueba exitosa! Así se verá tu recordatorio diario.");}}
-              style={{padding:"8px 13px",borderRadius:999,border:`1.5px solid ${C.blue}`,background:C.blueSoft,color:C.blue,fontWeight:700,fontSize:12.5}}>
+              style={{padding:"8px 13px",borderRadius:999,border:`1.5px solid ${C.blue}`,background:C.blueSoft,color:C.blue,fontWeight:700,fontSize:13}}>
               🔔 Probar ahora
             </button>
           </div>
@@ -3949,8 +3949,8 @@ function Grammar({state, registerActivity}){
         <span style={{color:C.coral}}>✗ {total-correct}</span>
       </div>}
       <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:18}}>
-        <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,marginBottom:8}}>Elige la opción correcta</p>
-        <p style={{fontSize:19,fontWeight:600,lineHeight:1.4,marginBottom:isA0&&trMap.q?2:8,fontFamily:"'Newsreader',Georgia,serif"}}>{card.q}</p>
+        <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2,marginBottom:8}}>Elige la opción correcta</p>
+        <p style={{fontSize:20,fontWeight:600,lineHeight:1.4,marginBottom:isA0&&trMap.q?2:8,fontFamily:FEN}}>{card.q}</p>
         {isA0&&trMap.q&&<p className="fadein" style={{fontSize:14,color:C.inkSoft,fontStyle:"italic",marginBottom:10}}>🇪🇸 {trMap.q}</p>}
         {isA0&&!trMap.q&&(
           <button onClick={()=>translateOne("q",card.q)} disabled={trLoad.q}
@@ -3970,7 +3970,7 @@ function Grammar({state, registerActivity}){
             <div key={i} style={{position:"relative",marginBottom:8}}>
               <button onClick={()=>answer(opt)}
                 style={{display:"block",width:"100%",textAlign:"left",padding:"12px 44px 12px 14px",borderRadius:12,border:`1.5px solid ${border}`,background:bg,color,fontSize:15,fontWeight:opt===card.ans&&picked!==null?700:400}}>
-                <span style={{fontFamily:"'Newsreader',Georgia,serif"}}>{opt}</span>
+                <span style={{fontFamily:FEN}}>{opt}</span>
                 {optTr&&<span style={{display:"block",fontSize:12,color:C.inkSoft,fontStyle:"italic",fontFamily:FUI,marginTop:2}}>🇪🇸 {optTr}</span>}
               </button>
               {isA0&&!optTr&&picked===null&&(
@@ -3985,7 +3985,7 @@ function Grammar({state, registerActivity}){
           <div className="fadein" style={{marginTop:8,padding:"10px 12px",background:C.paper,borderRadius:10,fontSize:13}}>
             {picked===card.ans
               ? <span style={{color:C.green,fontWeight:600}}>✓ ¡Correcto!</span>
-              : <span style={{color:C.coral,fontWeight:600}}>✗ Era: <strong style={{fontFamily:"'Newsreader',Georgia,serif"}}>{card.ans}</strong></span>}
+              : <span style={{color:C.coral,fontWeight:600}}>✗ Era: <strong style={{fontFamily:FEN}}>{card.ans}</strong></span>}
             {card.hint&&<span style={{color:C.inkSoft}}> — {card.hint}</span>}
           </div>
         )}
@@ -4073,7 +4073,7 @@ function Verbs({registerActivity,state}){
                 {[{l:"Infinitivo",v:parts[0]},{l:"Pasado",v:parts[1]},{l:"Participio",v:parts[2]}].map((p,i)=>p.v&&(
                   <div key={i} style={{minWidth:0,background:C.paper,borderRadius:10,padding:"8px 9px"}}>
                     <div style={{fontSize:9,color:C.inkSoft,textTransform:"uppercase",letterSpacing:0.5}}>{p.l}</div>
-                    <div style={{fontSize:13.5,fontWeight:700,fontFamily:"'Newsreader',Georgia,serif",marginTop:3,wordBreak:"break-word",overflowWrap:"anywhere",lineHeight:1.15}}>{p.v}</div>
+                    <div style={{fontSize:14,fontWeight:700,fontFamily:FEN,marginTop:3,wordBreak:"break-word",overflowWrap:"anywhere",lineHeight:1.15}}>{p.v}</div>
                     <button onClick={()=>speak(p.v)} style={{border:"none",background:"transparent",fontSize:13,marginTop:2,padding:0}}>🔊</button>
                   </div>))}
               </div>
@@ -4117,7 +4117,7 @@ function Verbs({registerActivity,state}){
             <button key={i} onClick={()=>{setCurrent(v);setFlipped(false);setSearch("");}}
               style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",textAlign:"left",padding:"10px 14px",borderRadius:10,border:`1px solid ${C.line}`,background:C.card,marginBottom:6}}>
               <span>
-                <strong style={{fontFamily:"'Newsreader',Georgia,serif",fontSize:15,color:C.ink}}>{v.en.split(" / ")[0]}</strong>
+                <strong style={{fontFamily:FEN,fontSize:15,color:C.ink}}>{v.en.split(" / ")[0]}</strong>
                 <span style={{fontSize:13,color:C.inkSoft}}> — {v.es.replace(/ \((irregular|regular)\)$/,"")}</span>
               </span>
               <span style={{fontSize:9,fontWeight:700,color:v.type==="irregular"?C.coral:C.green,textTransform:"uppercase"}}>{v.type==="irregular"?"IRR":"REG"}</span>
@@ -4263,7 +4263,7 @@ function Vocabulary({registerActivity,state}){
                 <div>
                   <span style={{fontSize:14,color:C.ink}}>{w.es}</span>
                   <span style={{fontSize:14,color:C.inkSoft}}> — </span>
-                  <span style={{fontFamily:"'Newsreader',Georgia,serif",fontSize:15,fontWeight:600,color:C.ink}}>{w.en}</span>
+                  <span style={{fontFamily:FEN,fontSize:15,fontWeight:600,color:C.ink}}>{w.en}</span>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                   {learned&&<span style={{fontSize:11,color:C.green}}>✓</span>}
@@ -4279,10 +4279,10 @@ function Vocabulary({registerActivity,state}){
         current?(
           <div className="fadein" style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:18,padding:24,minHeight:200,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
             <div style={{textAlign:"center"}}>
-              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5}}>{flipped?"En inglés":"¿Cómo se dice…?"}</p>
+              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2}}>{flipped?"En inglés":"¿Cómo se dice…?"}</p>
               <p style={{fontSize:28,fontWeight:700,margin:"14px 0 6px",color:C.ink}}>{current.es}</p>
               {flipped&&(
-                <p className="fadein" style={{fontSize:30,fontFamily:"'Newsreader',Georgia,serif",margin:"4px 0"}}>
+                <p className="fadein" style={{fontSize:30,fontFamily:FEN,margin:"4px 0"}}>
                   <span className="hl">{current.en}</span>
                   <button onClick={()=>speak(current.en)} aria-label="Escuchar" style={{border:"none",background:"transparent",fontSize:22,marginLeft:8}}>🔊</button>
                 </p>
@@ -4384,7 +4384,7 @@ function VerbExamples({card,level}){
       {ex.map((e,i)=>(
         <p key={i} style={{margin:"0 0 10px",fontSize:13,lineHeight:1.5}}>
           <span style={{fontSize:10,color:C.blue,fontWeight:700,textTransform:"uppercase",letterSpacing:1}}>{e.form}</span><br/>
-          <span style={{fontFamily:"'Newsreader',Georgia,serif",fontSize:15}}>{e.en}</span>
+          <span style={{fontFamily:FEN,fontSize:15}}>{e.en}</span>
           <button onClick={()=>speak(e.en)} style={{border:"none",background:"transparent",fontSize:13,marginLeft:4}}>🔊</button><br/>
           <span style={{color:C.inkSoft,fontStyle:"italic",fontSize:12}}>🇪🇸 {e.es}</span>
         </p>
@@ -4547,11 +4547,11 @@ function AudioGame({registerActivity,state}){
         <p style={{fontSize:15,color:C.inkSoft,margin:"0 0 16px"}}>Reconociste <strong style={{color:C.ink}}>{score}</strong> de {AUDIO_ROUNDS} palabras.</p>
         <div style={{display:"flex",gap:10,justifyContent:"center",marginBottom:20}}>
           <div style={{background:C.blueSoft,borderRadius:14,padding:"12px 20px"}}>
-            <div style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Aciertos</div>
+            <div style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2}}>Aciertos</div>
             <div style={{fontSize:24,fontWeight:800,color:C.blue}}>{score}/{AUDIO_ROUNDS}</div>
           </div>
           <div style={{background:C.greenSoft,borderRadius:14,padding:"12px 20px"}}>
-            <div style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Récord</div>
+            <div style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2}}>Récord</div>
             <div style={{fontSize:24,fontWeight:800,color:C.green}}>{best}/{AUDIO_ROUNDS}</div>
           </div>
         </div>
@@ -4678,7 +4678,7 @@ function SpeedGame({registerActivity,state}){
         <h3 style={{fontSize:20,fontWeight:800,margin:"0 0 6px"}}>Contrarreloj</h3>
         <p style={{fontSize:14,color:C.inkSoft,margin:"0 0 16px",lineHeight:1.5}}>Traduce la mayor cantidad de palabras posible. Elige la traducción correcta lo más rápido que puedas.</p>
 
-        <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,margin:"0 0 8px",textAlign:"left"}}>Dificultad</p>
+        <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.2,fontWeight:700,margin:"0 0 8px",textAlign:"left"}}>Dificultad</p>
         <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
           {Object.values(SPEED_LEVELS).map(l=>(
             <button key={l.id} onClick={()=>setDiff(l.id)}
@@ -4709,11 +4709,11 @@ function SpeedGame({registerActivity,state}){
         <p style={{fontSize:15,color:C.inkSoft,margin:"0 0 4px"}}>Acertaste <strong style={{color:C.ink}}>{score}</strong> {score===1?"palabra":"palabras"} · {cfg.emoji} {cfg.label}</p>
         <div style={{display:"flex",gap:10,justifyContent:"center",margin:"16px 0 20px"}}>
           <div style={{background:C.blueSoft,borderRadius:14,padding:"12px 20px"}}>
-            <div style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Puntaje</div>
+            <div style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2}}>Puntaje</div>
             <div style={{fontSize:24,fontWeight:800,color:C.blue}}>{score}</div>
           </div>
           <div style={{background:C.greenSoft,borderRadius:14,padding:"12px 20px"}}>
-            <div style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Récord {cfg.label}</div>
+            <div style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2}}>Récord {cfg.label}</div>
             <div style={{fontSize:24,fontWeight:800,color:C.green}}>{best}</div>
           </div>
         </div>
@@ -4745,7 +4745,7 @@ function SpeedGame({registerActivity,state}){
       </div>
 
       <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:"24px 16px",textAlign:"center",marginBottom:16}}>
-        <p style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,margin:"0 0 8px"}}>¿Cómo se dice?</p>
+        <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",fontWeight:700,letterSpacing:1.2,margin:"0 0 8px"}}>¿Cómo se dice?</p>
         <p style={{fontSize:26,fontWeight:800,color:C.ink,margin:0,fontFamily:FEN}}>{round.target.es}</p>
       </div>
 
