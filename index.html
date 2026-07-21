@@ -1999,7 +1999,7 @@ function Phrases({state,save,registerActivity,initialMode}){
       {mode==="grammar" && <Grammar state={state} registerActivity={registerActivity}/>}
       {mode==="verbs"   && <Verbs registerActivity={registerActivity} state={state}/>}
       {mode==="vocab"   && <Vocabulary registerActivity={registerActivity} state={state}/>}
-      {mode==="speed"   && <SpeedGame registerActivity={registerActivity} state={state}/>}
+      {mode==="speed"   && <Games registerActivity={registerActivity} state={state}/>}
       {mode==="cards" && (<div>
       <p style={{marginBottom:14,fontSize:14,color:C.inkSoft}}>Lee el español, <span className="hl">dilo en voz alta en inglés</span>, y recién ahí voltea la tarjeta.</p>
       <div style={{display:"flex",gap:10,marginBottom:14,fontSize:13,color:C.inkSoft}}>
@@ -4364,6 +4364,183 @@ function makeSpeedRound(allWords,cfg,blockOf){
   const options=shuffle([target,...pool]);
   return {target,options};
 }
+// ============================================================
+// 🎮 JUEGOS — hub con selector entre los distintos juegos
+// ============================================================
+function Games({registerActivity,state}){
+  const [game,setGame]=useState(null); // null = menú · "speed" · "audio"
+  const GAMES=[
+    {id:"speed",emoji:"⏱️",title:"Contrarreloj",desc:"Traduce a máxima velocidad contra el reloj."},
+    {id:"audio",emoji:"🎧",title:"Escucha y elige",desc:"Oye la palabra en inglés y elige su significado."},
+  ];
+  if(game==="speed") return <div><button onClick={()=>setGame(null)} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,padding:"0 0 10px"}}>← Juegos</button><SpeedGame registerActivity={registerActivity} state={state}/></div>;
+  if(game==="audio") return <div><button onClick={()=>setGame(null)} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,padding:"0 0 10px"}}>← Juegos</button><AudioGame registerActivity={registerActivity} state={state}/></div>;
+  return(
+    <div className="fadein">
+      <p style={{fontSize:14,color:C.inkSoft,margin:"0 0 14px"}}>Elige un juego para practicar vocabulario de forma interactiva.</p>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {GAMES.map(g=>(
+          <button key={g.id} onClick={()=>setGame(g.id)}
+            style={{display:"flex",alignItems:"center",gap:14,padding:"16px",borderRadius:16,border:`1.5px solid ${C.line}`,background:C.card,textAlign:"left"}}>
+            <span style={{fontSize:30}}>{g.emoji}</span>
+            <span>
+              <span style={{display:"block",fontWeight:800,fontSize:16,color:C.ink}}>{g.title}</span>
+              <span style={{display:"block",fontSize:13,color:C.inkSoft}}>{g.desc}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// 🎧 ESCUCHA Y ELIGE — comprensión auditiva de palabras
+// ============================================================
+function audioBestKey(){return "fluido-audio-best";}
+function loadAudioBest(){try{return JSON.parse(localStorage.getItem(audioBestKey())||"0")||0;}catch(e){return 0;}}
+function saveAudioBest(n){try{localStorage.setItem(audioBestKey(),JSON.stringify(n));}catch(e){}}
+const AUDIO_ROUNDS=10; // rondas por partida
+function AudioGame({registerActivity,state}){
+  const {allWords,blockOf}=React.useMemo(()=>{
+    const lvl=state?.level||"B1";
+    const maxBlock=(lvl==="A0")?10:(lvl==="A2")?18:BANK_WORDS.length;
+    const seen=new Set();const out=[];const bo={};
+    BANK_WORDS.filter(b=>b.n<=maxBlock).forEach(b=>b.words.forEach(w=>{
+      const k=(w.en||"").toLowerCase();
+      if(w.en&&w.es&&!seen.has(k)){seen.add(k);out.push(w);bo[k]=b.n;}
+    }));
+    return {allWords:out,blockOf:bo};
+  },[state?.level]);
+  const {speak,supported}=useSpeech();
+  const [phase,setPhase]=useState("idle"); // idle · playing · done
+  const [round,setRound]=useState(null);
+  const [roundNum,setRoundNum]=useState(0);
+  const [score,setScore]=useState(0);
+  const [best,setBest]=useState(loadAudioBest());
+  const [picked,setPicked]=useState(null);
+  const [newRecord,setNewRecord]=useState(false);
+  const [misses,setMisses]=useState([]);
+  const [sheet,setSheet]=useState(null);
+
+  const makeRound=()=>{
+    const target=allWords[Math.floor(Math.random()*allWords.length)];
+    const pool=shuffle(allWords.filter(w=>w.en!==target.en)).slice(0,3);
+    return {target,options:shuffle([target,...pool])};
+  };
+
+  const startRound=(r)=>{ setPicked(null); setRound(r); setTimeout(()=>speak(r.target.en),250); };
+
+  const start=()=>{
+    setScore(0);setRoundNum(1);setNewRecord(false);setMisses([]);setSheet(null);setPhase("playing");
+    startRound(makeRound());
+  };
+
+  const answer=(opt)=>{
+    if(picked) return;
+    const correct=opt.en===round.target.en;
+    setPicked({en:opt.en,correct});
+    if(correct){ setScore(s=>s+1); }
+    else{
+      setMisses(m=>m.some(x=>x.en===round.target.en)?m:[...m,{en:round.target.en,es:round.target.es}]);
+      sesNote("🎧 Escucha",{head:round.target.en,sub:round.target.es,note:"no reconociste al oírla"});
+    }
+    setTimeout(()=>{
+      if(roundNum>=AUDIO_ROUNDS){
+        const finalScore=score+(correct?1:0);
+        const prev=loadAudioBest();
+        if(finalScore>prev){ setBest(finalScore); saveAudioBest(finalScore); setNewRecord(true); }
+        else setBest(prev);
+        registerActivity("phrases");
+        setPhase("done");
+      }else{
+        setRoundNum(n=>n+1);
+        startRound(makeRound());
+      }
+    },700);
+  };
+
+  if(phase==="idle"){
+    return(
+      <div className="fadein" style={{textAlign:"center",padding:"10px 0"}}>
+        <div style={{fontSize:44,marginBottom:8}}>🎧</div>
+        <h3 style={{fontSize:20,fontWeight:800,margin:"0 0 6px"}}>Escucha y elige</h3>
+        <p style={{fontSize:14,color:C.inkSoft,margin:"0 0 16px",lineHeight:1.5}}>Escucharás una palabra en inglés y eliges su significado. {AUDIO_ROUNDS} rondas. Entrena tu oído para reconocer vocabulario.</p>
+        {!supported&&<p style={{fontSize:13,color:C.coral,margin:"0 0 14px"}}>⚠️ Tu navegador no soporta audio de voz. Este juego necesita esa función.</p>}
+        <div style={{display:"inline-flex",gap:8,alignItems:"center",background:C.card,border:`1px solid ${C.line}`,borderRadius:999,padding:"8px 16px",marginBottom:20}}>
+          <span style={{fontSize:13,color:C.inkSoft}}>🏆 Tu récord:</span>
+          <span style={{fontWeight:800,fontSize:16,color:C.blue}}>{best}/{AUDIO_ROUNDS}</span>
+        </div>
+        <p style={{fontSize:11,color:C.inkSoft,margin:"0 0 16px"}}>Palabras de tu nivel ({state?.level||"B1"}).</p>
+        <BigButton onClick={start} disabled={!supported}>▶️ Empezar</BigButton>
+      </div>
+    );
+  }
+
+  if(phase==="done"){
+    return(
+      <div className="fadein" style={{textAlign:"center",padding:"10px 0"}}>
+        {newRecord&&<div style={{fontSize:40,marginBottom:4}}>🎉</div>}
+        <h3 style={{fontSize:22,fontWeight:800,margin:"0 0 4px"}}>{newRecord?"¡Nuevo récord!":"¡Terminaste!"}</h3>
+        <p style={{fontSize:15,color:C.inkSoft,margin:"0 0 16px"}}>Reconociste <strong style={{color:C.ink}}>{score}</strong> de {AUDIO_ROUNDS} palabras.</p>
+        <div style={{display:"flex",gap:10,justifyContent:"center",marginBottom:20}}>
+          <div style={{background:C.blueSoft,borderRadius:14,padding:"12px 20px"}}>
+            <div style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Aciertos</div>
+            <div style={{fontSize:24,fontWeight:800,color:C.blue}}>{score}/{AUDIO_ROUNDS}</div>
+          </div>
+          <div style={{background:C.greenSoft,borderRadius:14,padding:"12px 20px"}}>
+            <div style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Récord</div>
+            <div style={{fontSize:24,fontWeight:800,color:C.green}}>{best}/{AUDIO_ROUNDS}</div>
+          </div>
+        </div>
+        <BigButton onClick={start}>🔁 Jugar de nuevo</BigButton>
+        {misses.length>0&&(
+          <button onClick={()=>setSheet(misses.map(w=>({head:w.en,sub:w.es,note:"no la reconociste al oírla"})))}
+            style={{marginTop:10,width:"100%",padding:"12px",borderRadius:14,border:`1.5px dashed ${C.green}`,background:"transparent",color:C.green,fontWeight:700,fontSize:14}}>
+            📋 Cheat sheet de las {misses.length} que fallaste
+          </button>
+        )}
+        {sheet&&<CheatSheet title="Cheat sheet · Escucha" items={sheet} level={state.level} withTips={true} onClose={()=>setSheet(null)}/>}
+      </div>
+    );
+  }
+
+  // phase === "playing"
+  return(
+    <div className="fadein">
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <span style={{fontSize:13,color:C.inkSoft}}>Ronda {roundNum}/{AUDIO_ROUNDS}</span>
+        <span style={{fontSize:14,fontWeight:700,color:C.ink}}>⭐ {score}</span>
+      </div>
+
+      <div style={{textAlign:"center",marginBottom:20}}>
+        <button onClick={()=>round&&speak(round.target.en)} aria-label="Reproducir de nuevo"
+          style={{width:96,height:96,borderRadius:"50%",border:"none",background:`linear-gradient(145deg, ${C.blue}, ${C.blue}CC)`,color:"#fff",fontSize:40,boxShadow:`0 10px 24px ${C.blue}55`}}>
+          🔊
+        </button>
+        <p style={{fontSize:12,color:C.inkSoft,margin:"10px 0 0"}}>Toca para volver a escuchar</p>
+      </div>
+
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {round&&round.options.map((opt,i)=>{
+          let bg=C.card,border=C.line,color=C.ink;
+          if(picked){
+            if(opt.en===round.target.en){ bg=C.greenSoft;border=C.green;color=C.green; }
+            else if(opt.en===picked.en){ bg=C.coralSoft;border=C.coral;color=C.coral; }
+          }
+          return(
+            <button key={i} onClick={()=>answer(opt)} disabled={!!picked}
+              style={{padding:"14px 16px",borderRadius:14,border:`1.5px solid ${border}`,background:bg,color,fontWeight:700,fontSize:16,fontFamily:FEN,textAlign:"left",transition:"all .15s"}}>
+              {opt.es}
+              {picked&&opt.en===round.target.en&&<span style={{float:"right",fontSize:13,color:C.green,fontWeight:600}}>{opt.en}</span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function SpeedGame({registerActivity,state}){
   // Pool filtrado por nivel de inglés: A0/A2 → primeros bloques (palabras más comunes); B1+ → todo el banco.
   const {allWords,blockOf}=React.useMemo(()=>{
