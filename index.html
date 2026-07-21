@@ -1988,17 +1988,18 @@ function Phrases({state,save,registerActivity,initialMode}){
       {/* Mode switcher */}
       <div style={{display:"flex",gap:6,marginBottom:14}}>
         {(state.level==="A0"
-          ? [{id:"vocab",l:"🔠 Vocab"},{id:"verbs",l:"🔤 Verbos"},{id:"grammar",l:"📝 Quiz"},{id:"cards",l:"📚 Frases"}]
-          : [{id:"cards",l:"📚 Frases"},{id:"grammar",l:"📝 Quiz"},{id:"verbs",l:"🔤 Verbos"},{id:"vocab",l:"🔠 Vocab"}]
+          ? [{id:"vocab",l:"🔠 Vocab"},{id:"speed",l:"⏱️ Juego"},{id:"verbs",l:"🔤 Verbos"},{id:"grammar",l:"📝 Quiz"},{id:"cards",l:"📚 Frases"}]
+          : [{id:"cards",l:"📚 Frases"},{id:"speed",l:"⏱️ Juego"},{id:"grammar",l:"📝 Quiz"},{id:"verbs",l:"🔤 Verbos"},{id:"vocab",l:"🔠 Vocab"}]
         ).map(m=>(
           <button key={m.id} onClick={()=>setMode(m.id)}
-            style={{flex:1,padding:"8px 4px",borderRadius:10,border:`1.5px solid ${mode===m.id?C.blue:C.line}`,background:mode===m.id?C.blueSoft:"transparent",color:mode===m.id?C.blue:C.inkSoft,fontWeight:600,fontSize:11}}>
+            style={{flex:1,padding:"8px 3px",borderRadius:10,border:`1.5px solid ${mode===m.id?C.blue:C.line}`,background:mode===m.id?C.blueSoft:"transparent",color:mode===m.id?C.blue:C.inkSoft,fontWeight:600,fontSize:10.5}}>
             {m.l}
           </button>))}
       </div>
       {mode==="grammar" && <Grammar state={state} registerActivity={registerActivity}/>}
       {mode==="verbs"   && <Verbs registerActivity={registerActivity} state={state}/>}
       {mode==="vocab"   && <Vocabulary registerActivity={registerActivity} state={state}/>}
+      {mode==="speed"   && <SpeedGame registerActivity={registerActivity} state={state}/>}
       {mode==="cards" && (<div>
       <p style={{marginBottom:14,fontSize:14,color:C.inkSoft}}>Lee el español, <span className="hl">dilo en voz alta en inglés</span>, y recién ahí voltea la tarjeta.</p>
       <div style={{display:"flex",gap:10,marginBottom:14,fontSize:13,color:C.inkSoft}}>
@@ -4334,6 +4335,146 @@ function VerbExamples({card,level}){
           <span style={{color:C.inkSoft,fontStyle:"italic",fontSize:12}}>🇪🇸 {e.es}</span>
         </p>
       ))}
+    </div>
+  );
+}
+
+// ============================================================
+// ⏱️ CONTRARRELOJ — juego de velocidad de vocabulario
+// ============================================================
+function speedBestKey(){return "fluido-speed-best";}
+function loadSpeedBest(){try{return JSON.parse(localStorage.getItem(speedBestKey())||"0")||0;}catch(e){return 0;}}
+function saveSpeedBest(n){try{localStorage.setItem(speedBestKey(),JSON.stringify(n));}catch(e){}}
+const SPEED_DURATION=60; // segundos
+function shuffle(arr){const a=[...arr];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+// Genera una ronda: palabra objetivo (es→en) + 4 opciones (1 correcta, 3 distractores del banco).
+function makeSpeedRound(allWords){
+  const target=allWords[Math.floor(Math.random()*allWords.length)];
+  const pool=shuffle(allWords.filter(w=>w.en!==target.en)).slice(0,3);
+  const options=shuffle([target,...pool]);
+  return {target,options};
+}
+function SpeedGame({registerActivity,state}){
+  // Aplana todas las palabras del banco una sola vez.
+  const allWords=React.useMemo(()=>{
+    const seen=new Set();const out=[];
+    BANK_WORDS.forEach(b=>b.words.forEach(w=>{const k=(w.en||"").toLowerCase();if(w.en&&w.es&&!seen.has(k)){seen.add(k);out.push(w);}}));
+    return out;
+  },[]);
+  const [phase,setPhase]=useState("idle"); // idle · playing · done
+  const [score,setScore]=useState(0);
+  const [best,setBest]=useState(loadSpeedBest());
+  const [timeLeft,setTimeLeft]=useState(SPEED_DURATION);
+  const [round,setRound]=useState(null);
+  const [picked,setPicked]=useState(null); // {en, correct} feedback breve
+  const [streak,setStreak]=useState(0);
+  const [newRecord,setNewRecord]=useState(false);
+  const {speak}=useSpeech();
+  const timerRef=useRef(null);
+
+  const endGame=(finalScore)=>{
+    clearInterval(timerRef.current);
+    setPhase("done");
+    if(finalScore>best){ setBest(finalScore); saveSpeedBest(finalScore); setNewRecord(true); }
+    registerActivity("phrases");
+  };
+
+  const start=()=>{
+    setScore(0);setStreak(0);setNewRecord(false);setTimeLeft(SPEED_DURATION);setPicked(null);
+    setRound(makeSpeedRound(allWords));setPhase("playing");
+    clearInterval(timerRef.current);
+    timerRef.current=setInterval(()=>{
+      setTimeLeft(t=>{
+        if(t<=1){ endGame_ref.current(); return 0; }
+        return t-1;
+      });
+    },1000);
+  };
+  // Ref para leer el score actual al terminar por tiempo, sin recrear el intervalo.
+  const scoreRef=useRef(0); useEffect(()=>{scoreRef.current=score;},[score]);
+  const endGame_ref=useRef(()=>{}); useEffect(()=>{endGame_ref.current=()=>endGame(scoreRef.current);});
+  useEffect(()=>()=>clearInterval(timerRef.current),[]);
+
+  const answer=(opt)=>{
+    if(phase!=="playing"||picked) return;
+    const correct=opt.en===round.target.en;
+    setPicked({en:opt.en,correct});
+    if(correct){ setScore(s=>s+1); setStreak(s=>s+1); }
+    else{ setStreak(0); }
+    setTimeout(()=>{ setPicked(null); setRound(makeSpeedRound(allWords)); },420);
+  };
+
+  if(phase==="idle"){
+    return(
+      <div className="fadein" style={{textAlign:"center",padding:"10px 0"}}>
+        <div style={{fontSize:44,marginBottom:8}}>⏱️</div>
+        <h3 style={{fontSize:20,fontWeight:800,margin:"0 0 6px"}}>Contrarreloj</h3>
+        <p style={{fontSize:14,color:C.inkSoft,margin:"0 0 16px",lineHeight:1.5}}>Traduce la mayor cantidad de palabras en {SPEED_DURATION} segundos. Elige la traducción correcta lo más rápido que puedas.</p>
+        <div style={{display:"inline-flex",gap:8,alignItems:"center",background:C.card,border:`1px solid ${C.line}`,borderRadius:999,padding:"8px 16px",marginBottom:20}}>
+          <span style={{fontSize:13,color:C.inkSoft}}>🏆 Tu récord:</span>
+          <span style={{fontWeight:800,fontSize:16,color:C.blue}}>{best}</span>
+        </div>
+        <BigButton onClick={start}>▶️ Empezar</BigButton>
+      </div>
+    );
+  }
+
+  if(phase==="done"){
+    return(
+      <div className="fadein" style={{textAlign:"center",padding:"10px 0"}}>
+        {newRecord&&<div style={{fontSize:40,marginBottom:4}}>🎉</div>}
+        <h3 style={{fontSize:22,fontWeight:800,margin:"0 0 4px"}}>{newRecord?"¡Nuevo récord!":"¡Tiempo!"}</h3>
+        <p style={{fontSize:15,color:C.inkSoft,margin:"0 0 16px"}}>Acertaste <strong style={{color:C.ink}}>{score}</strong> {score===1?"palabra":"palabras"} en {SPEED_DURATION}s.</p>
+        <div style={{display:"flex",gap:10,justifyContent:"center",marginBottom:20}}>
+          <div style={{background:C.blueSoft,borderRadius:14,padding:"12px 20px"}}>
+            <div style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Puntaje</div>
+            <div style={{fontSize:24,fontWeight:800,color:C.blue}}>{score}</div>
+          </div>
+          <div style={{background:C.greenSoft,borderRadius:14,padding:"12px 20px"}}>
+            <div style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Récord</div>
+            <div style={{fontSize:24,fontWeight:800,color:C.green}}>{best}</div>
+          </div>
+        </div>
+        <BigButton onClick={start}>🔁 Jugar de nuevo</BigButton>
+        <button onClick={()=>setPhase("idle")} style={{marginTop:10,width:"100%",padding:"12px",borderRadius:14,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:600,fontSize:14}}>Volver</button>
+      </div>
+    );
+  }
+
+  // phase === "playing"
+  const pct=(timeLeft/SPEED_DURATION)*100;
+  const low=timeLeft<=10;
+  return(
+    <div className="fadein">
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+        <span style={{fontSize:14,fontWeight:700,color:C.ink}}>⭐ {score}</span>
+        {streak>=3&&<span style={{fontSize:12,fontWeight:700,color:C.green}}>🔥 racha {streak}</span>}
+        <span style={{fontSize:14,fontWeight:800,color:low?C.coral:C.inkSoft}}>{timeLeft}s</span>
+      </div>
+      <div style={{height:6,borderRadius:99,background:C.line,overflow:"hidden",marginBottom:18}}>
+        <div style={{height:"100%",width:`${pct}%`,background:low?C.coral:C.blue,borderRadius:99,transition:"width 1s linear"}}/>
+      </div>
+
+      <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:16,padding:"24px 16px",textAlign:"center",marginBottom:16}}>
+        <p style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,margin:"0 0 8px"}}>¿Cómo se dice?</p>
+        <p style={{fontSize:26,fontWeight:800,color:C.ink,margin:0,fontFamily:FEN}}>{round.target.es}</p>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        {round.options.map((opt,i)=>{
+          let bg=C.card,border=C.line,color=C.ink;
+          if(picked){
+            if(opt.en===round.target.en){ bg=C.greenSoft;border=C.green;color=C.green; }
+            else if(opt.en===picked.en){ bg=C.coralSoft;border=C.coral;color=C.coral; }
+          }
+          return(
+            <button key={i} onClick={()=>answer(opt)} disabled={!!picked}
+              style={{padding:"16px 10px",borderRadius:14,border:`1.5px solid ${border}`,background:bg,color,fontWeight:700,fontSize:15,fontFamily:FEN,transition:"all .15s",minHeight:56}}>
+              {opt.en}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
