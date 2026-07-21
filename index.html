@@ -2135,6 +2135,38 @@ function listenSave(d){try{sessionStorage.setItem("fluido-listen",JSON.stringify
 function writeLoad(){try{return JSON.parse(sessionStorage.getItem("fluido-write")||"null");}catch(e){return null;}}
 function writeSave(d){try{sessionStorage.setItem("fluido-write",JSON.stringify(d));}catch(e){}}
 
+// ---------- Ruta de estructuras: progreso persistente ----------
+const WRITE_PATH_KEY="fluido-write-path";
+const MASTERY_TARGET=2; // aciertos con structure_ok para dominar una estructura
+function loadPathProgress(){try{return JSON.parse(localStorage.getItem(WRITE_PATH_KEY)||"{}")||{};}catch(e){return {};}}
+function savePathProgress(p){try{localStorage.setItem(WRITE_PATH_KEY,JSON.stringify(p));}catch(e){}}
+function pathStepId(tenseId,typeId){return tenseId+"|"+typeId;}
+// Construye la secuencia ordenada: por cada tiempo (según nivel), las 3 formas afirmativa→negativa→pregunta.
+function buildPath(level){
+  const levelIdx=id=>LEVELS.findIndex(l=>l.id===id);
+  const steps=[];
+  TENSES.filter(t=>levelIdx(t.minLevel)<=levelIdx(level)).forEach(t=>{
+    SENTENCE_TYPES.forEach(ty=>{
+      steps.push({tenseId:t.id,typeId:ty.id,tenseLabel:t.label,typeLabel:ty.label,id:pathStepId(t.id,ty.id)});
+    });
+  });
+  return steps;
+}
+function stepHits(progress,stepId){return (progress[stepId]&&progress[stepId].hits)||0;}
+function isStepMastered(progress,stepId){return stepHits(progress,stepId)>=MASTERY_TARGET;}
+// Índice del primer paso no dominado (el "actual" de la ruta); -1 si todo dominado.
+function currentStepIndex(steps,progress){
+  for(let i=0;i<steps.length;i++){ if(!isStepMastered(progress,steps[i].id)) return i; }
+  return -1;
+}
+function recordPathHit(stepId){
+  const p=loadPathProgress();
+  const cur=p[stepId]||{hits:0};
+  p[stepId]={hits:Math.min(MASTERY_TARGET,cur.hits+1),ts:Date.now()};
+  savePathProgress(p);
+  return p;
+}
+
 // ============================================================
 // ESCRIBIR — construcción guiada de oraciones (fórmula + piezas)
 // ============================================================
@@ -2335,9 +2367,12 @@ function FormulaCard({tenseId,typeId}){
 }
 function Write({state,registerActivity}){
   const sv=writeLoad();
+  // Vistas: "path" (mapa de ruta) · "practice" (escribir+corregir)
+  const [view,setView]=useState(sv?.view||"path");
   const [prompt,setPrompt]=useState(sv?.prompt||null);
   const [sentenceType,setSentenceType]=useState(sv?.sentenceType||"afirmativa");
   const [tense,setTense]=useState(sv?.tense||"present_simple");
+  const [pathStep,setPathStep]=useState(sv?.pathStep||null); // {tenseId,typeId,...} si venimos de la ruta
   const [sentence,setSentence]=useState(sv?.sentence||"");
   const [feedback,setFeedback]=useState(sv?.feedback||null);
   const [loadingPrompt,setLoadingPrompt]=useState(false);
@@ -2348,26 +2383,48 @@ function Write({state,registerActivity}){
   const [sheet,setSheet]=useState(null);
   const [showCustom,setShowCustom]=useState(false);
   const [customSuggestion,setCustomSuggestion]=useState("");
+  const [progress,setProgress]=useState(loadPathProgress());
+  const [justMastered,setJustMastered]=useState(false);
   const {speak}=useSpeech();
+
+  const steps=buildPath(state.level);
+  const curIdx=currentStepIndex(steps,progress);
+  const masteredCount=steps.filter(s=>isStepMastered(progress,s.id)).length;
 
   const levelIdx=id=>LEVELS.findIndex(l=>l.id===id);
   const availableTenses=TENSES.filter(t=>levelIdx(t.minLevel)<=levelIdx(state.level));
   const activeTense=availableTenses.some(t=>t.id===tense)?tense:(availableTenses[0]?.id||"present_simple");
   const formula=FORMULAS[activeTense][sentenceType];
 
-  useEffect(()=>{ writeSave({prompt,sentenceType,tense:activeTense,sentence,feedback}); },[prompt,sentenceType,activeTense,sentence,feedback]);
+  useEffect(()=>{ writeSave({view,prompt,sentenceType,tense:activeTense,pathStep,sentence,feedback}); },[view,prompt,sentenceType,activeTense,pathStep,sentence,feedback]);
 
-  const resetSentence=()=>{setSentence("");setFeedback(null);setIdeas([]);setError(null);};
+  const resetSentence=()=>{setSentence("");setFeedback(null);setIdeas([]);setError(null);setJustMastered(false);};
 
+  // Arranca la práctica para un paso concreto de la ruta (tipo/tiempo fijos).
+  const startPathStep=async(step)=>{
+    setPathStep(step);setSentenceType(step.typeId);setTense(step.tenseId);
+    setView("practice");resetSentence();setPrompt(null);setLoadingPrompt(true);setError(null);
+    try{sessionStorage.removeItem("fluido-write");}catch(e){}
+    try{
+      const data=await askAI_JSON(
+        `Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera UNA consigna breve para practicar la construcción de UNA oración en inglés (no un párrafo), que EMPUJE naturalmente a usar una oración ${step.typeLabel.toLowerCase()} en ${step.tenseLabel.toLowerCase()}, ajustada EXACTAMENTE a la complejidad del nivel indicado. La consigna describe una situación comunicativa concreta. Varía el enfoque (semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve SOLO JSON: {"prompt_es":"consigna en español, breve y clara","example_hint_es":"pista corta opcional de qué incluir"}`,
+        "Eres un profesor de inglés que diseña consignas breves para practicar una estructura gramatical concreta."
+      );
+      setPrompt(data);
+    }catch(e){setError(e.userMsg||"No pude generar el ejercicio. Intenta de nuevo.");}
+    setLoadingPrompt(false);
+  };
+
+  // Modo libre: escenario aleatorio, tema personal o propio (sin paso de ruta).
   const newPrompt=async(topic,isCustom)=>{
-    setLoadingPrompt(true);setError(null);setPrompt(null);setShowCustom(false);resetSentence();
+    setPathStep(null);setView("practice");setLoadingPrompt(true);setError(null);setPrompt(null);setShowCustom(false);resetSentence();
     try{sessionStorage.removeItem("fluido-write");}catch(e){}
     try{
       const topicLine=isCustom
         ? `El estudiante quiere practicar esta situación específica: "${topic}". Adáptala a UNA consigna breve. `
         : (topic?`TEMA OBLIGATORIO de la consigna: ${topic}. `:"Debe pedir escribir sobre un tema cotidiano relacionado a sus intereses u objetivos. ");
       const data=await askAI_JSON(
-        `Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera UNA consigna breve para practicar la construcción de UNA oración en inglés (no un párrafo), ajustada EXACTAMENTE a la complejidad del nivel indicado. ${topicLine}La consigna debe describir una situación comunicativa concreta donde el alumno necesite expresar UNA idea (ej: contarle a alguien un plan, pedir algo, describir una rutina, negar algo, preguntar algo). Varía el enfoque (semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve SOLO JSON: {"prompt_es":"consigna en español, breve y clara","example_hint_es":"pista corta opcional de qué incluir"}`,
+        `Perfil (sin nombre): ${profileForPrompts(state,false)}\n\nGenera UNA consigna breve para practicar la construcción de UNA oración en inglés (no un párrafo), ajustada EXACTAMENTE a la complejidad del nivel indicado. ${topicLine}La consigna debe describir una situación comunicativa concreta donde el alumno necesite expresar UNA idea. Varía el enfoque (semilla: ${Math.random().toString(36).slice(2)}).\n\nDevuelve SOLO JSON: {"prompt_es":"consigna en español, breve y clara","example_hint_es":"pista corta opcional de qué incluir"}`,
         "Eres un profesor de inglés que diseña consignas breves para practicar construcción de oraciones."
       );
       setPrompt(data);
@@ -2402,6 +2459,13 @@ function Write({state,registerActivity}){
       (data.errors||[]).slice(0,5).forEach(e=>sesNote("✍️ Escribir",{head:e.fix,sub:"en vez de: "+e.original,note:e.why_es}));
       recordPerf("write", lvl, !(data.errors&&data.errors.length>0));
       registerActivity("write");
+      // Progreso de la ruta: solo si venimos de un paso y la estructura se aplicó bien.
+      if(pathStep && data.structure_ok===true){
+        const wasMastered=isStepMastered(progress,pathStep.id);
+        const np=recordPathHit(pathStep.id);
+        setProgress(np);
+        if(!wasMastered && isStepMastered(np,pathStep.id)) setJustMastered(true);
+      }
     }catch(e){setError(e.userMsg||"No pude revisar tu oración. Intenta de nuevo.");}
     setLoadingReview(false);
   };
@@ -2413,37 +2477,92 @@ function Write({state,registerActivity}){
     return items;
   };
 
-  return(
-    <div>
-      <h2 style={{fontSize:26,fontWeight:800,marginBottom:4}}>Escribir</h2>
-      <p style={{fontSize:14,color:C.inkSoft,marginBottom:12}}>Mira la fórmula como guía y escribe tu oración — te la corrijo al toque.</p>
-      <ModuleInfo id="write" points={[
-        ["🧩",<>Es tu <strong>taller de construcción de oraciones</strong>: eliges tipo (afirmativa/negativa/pregunta) y tiempo verbal, ves la fórmula con un ejemplo, y escribes tu propia oración siguiendo esa guía.</>],
-        ["🔍",<>Entrena tu <strong>precisión gramatical</strong>: recibes corrección + si respetaste la estructura pedida, con explicación en español.</>],
-        ["🔁",<>Puedes repetir el mismo escenario con <strong>otra estructura</strong> para practicar cómo cambia la oración según el tiempo verbal.</>]
-      ]}/>
+  const backToPath=()=>{setView("path");setPathStep(null);setPrompt(null);resetSentence();setProgress(loadPathProgress());};
 
-      {!prompt&&!loadingPrompt&&(
-        <div>
+  // ---------- Vista: MAPA DE RUTA ----------
+  if(view==="path"){
+    const allDone=curIdx===-1;
+    return(
+      <div>
+        <h2 style={{fontSize:26,fontWeight:800,marginBottom:4}}>Escribir</h2>
+        <p style={{fontSize:14,color:C.inkSoft,marginBottom:12}}>Domina las estructuras del inglés, una a una. Cada una se marca ✅ cuando la aplicas bien {MASTERY_TARGET} veces.</p>
+        <ModuleInfo id="write" points={[
+          ["🧭",<>Es una <strong>ruta de estructuras</strong>: avanzas por tipo (afirmativa/negativa/pregunta) y tiempo verbal en orden. Cada estructura se domina aplicándola bien {MASTERY_TARGET} veces.</>],
+          ["🔍",<>Cada ejercicio te da una consigna, ves la <strong>fórmula</strong> como guía y escribes tu oración. Recibes corrección + si respetaste la estructura.</>],
+          ["🎯",<>Al final de la ruta también puedes practicar <strong>libre</strong>: escenario aleatorio, sobre tus temas o uno propio.</>]
+        ]}/>
+
+        {/* Barra de progreso global */}
+        <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:14,padding:14,marginBottom:16}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
+            <span style={{fontWeight:700,fontSize:15}}>Tu ruta</span>
+            <span style={{fontSize:13,color:C.inkSoft}}>{masteredCount} / {steps.length} dominadas</span>
+          </div>
+          <div style={{height:8,borderRadius:99,background:C.line,overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${steps.length?Math.round(masteredCount/steps.length*100):0}%`,background:C.green,borderRadius:99,transition:"width .4s ease"}}/>
+          </div>
+        </div>
+
+        {allDone&&(
+          <div style={{background:C.greenSoft,border:`1px solid ${C.green}`,borderRadius:14,padding:16,marginBottom:16}}>
+            <p style={{fontWeight:700,color:C.green,margin:"0 0 4px"}}>🎉 ¡Ruta completa!</p>
+            <p style={{fontSize:13,color:C.ink,margin:0}}>Dominaste todas las estructuras de tu nivel. Sigue practicando libre abajo, o sube de nivel para desbloquear estructuras nuevas.</p>
+          </div>
+        )}
+
+        {/* Lista de estructuras, agrupadas por tiempo verbal */}
+        {availableTenses.map(t=>{
+          const group=steps.filter(s=>s.tenseId===t.id);
+          return(
+            <div key={t.id} style={{marginBottom:14}}>
+              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,margin:"0 0 8px"}}>{t.label}</p>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {group.map(s=>{
+                  const gIdx=steps.findIndex(x=>x.id===s.id);
+                  const mastered=isStepMastered(progress,s.id);
+                  const isCurrent=gIdx===curIdx;
+                  const locked=gIdx>curIdx && curIdx!==-1;
+                  const hits=stepHits(progress,s.id);
+                  return(
+                    <button key={s.id} disabled={locked} onClick={()=>startPathStep(s)}
+                      style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"12px 14px",borderRadius:12,
+                        border:`1.5px solid ${isCurrent?C.blue:mastered?C.green:C.line}`,
+                        background:isCurrent?C.blueSoft:mastered?C.greenSoft:C.card,
+                        opacity:locked?0.5:1,cursor:locked?"default":"pointer",textAlign:"left"}}>
+                      <span style={{display:"flex",alignItems:"center",gap:10}}>
+                        <span style={{fontSize:18}}>{mastered?"✅":locked?"🔒":isCurrent?"👉":"⚪"}</span>
+                        <span style={{fontWeight:isCurrent?700:600,fontSize:14,color:C.ink}}>{s.typeLabel}</span>
+                      </span>
+                      <span style={{fontSize:12,color:mastered?C.green:C.inkSoft,fontWeight:600}}>
+                        {mastered?"Dominada":locked?"Bloqueada":`${hits}/${MASTERY_TARGET}`}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Modo libre */}
+        <div style={{marginTop:8,paddingTop:16,borderTop:`1px dashed ${C.line}`}}>
+          <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"0 0 10px"}}>🎯 Práctica libre</p>
           {!showCustom?(
-            <>
-              <BigButton onClick={()=>newPrompt()}>✨ Pedir un escenario</BigButton>
-              <button onClick={()=>setShowCustom(true)}
-                style={{width:"100%",marginTop:10,padding:"13px 18px",borderRadius:14,border:`1.5px solid ${C.blue}`,background:"transparent",color:C.blue,fontWeight:600,fontSize:15}}>
-                ✏️ Proponer mi propio escenario
-              </button>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <button onClick={()=>newPrompt()} style={{padding:"12px 16px",borderRadius:12,border:`1.5px solid ${C.line}`,background:C.card,color:C.ink,fontWeight:600,fontSize:14,textAlign:"left"}}>✨ Escenario aleatorio</button>
+              <button onClick={()=>setShowCustom(true)} style={{padding:"12px 16px",borderRadius:12,border:`1.5px solid ${C.line}`,background:C.card,color:C.ink,fontWeight:600,fontSize:14,textAlign:"left"}}>✏️ Proponer mi propio escenario</button>
               {(()=>{const pt=loadPersonalTopics().topics;if(!pt.length)return null;return(
-                <div style={{marginTop:14}}>
-                  <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"0 0 8px"}}>✨ O escribe sobre tus temas</p>
+                <div style={{marginTop:6}}>
+                  <p style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1.5,margin:"0 0 8px"}}>✨ O sobre tus temas</p>
                   <ChipsWithSheet items={pt} onPick={t=>newPrompt(t.en)} limit={4} title="✨ Tus temas"/>
                 </div>);})()}
-            </>
+            </div>
           ):(
             <div className="fadein" style={{background:C.card,border:`1.5px solid ${C.blue}`,borderRadius:16,padding:18}}>
               <p style={{fontWeight:600,marginBottom:8}}>¿Qué situación quieres practicar?</p>
               <p style={{fontSize:13,color:C.inkSoft,marginBottom:10}}>Descríbela en español — Fluido la adaptará a tu nivel.</p>
               <textarea value={customSuggestion} onChange={e=>setCustomSuggestion(e.target.value)}
-                placeholder="Ej: contarle a mi jefe que voy a llegar tarde... / pedirle a un colega que revise mi código... / describir mi rutina de la mañana..."
+                placeholder="Ej: contarle a mi jefe que voy a llegar tarde... / pedirle a un colega que revise mi código..."
                 rows={4} style={{width:"100%",padding:"12px 14px",fontSize:14,borderRadius:12,border:`1.5px solid ${C.line}`,outline:"none",resize:"vertical",background:C.paper,color:C.ink}}/>
               <div style={{display:"flex",gap:8,marginTop:10}}>
                 <button onClick={()=>setShowCustom(false)} style={{flex:1,padding:"12px 0",borderRadius:12,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:500}}>Cancelar</button>
@@ -2455,9 +2574,20 @@ function Write({state,registerActivity}){
             </div>
           )}
         </div>
-      )}
-      {loadingPrompt&&<p style={{fontSize:14,color:C.inkSoft}}>Pensando un escenario…</p>}
-      {error&&<p style={{fontSize:14,color:C.coral,marginTop:8}}>{error}</p>}
+      </div>
+    );
+  }
+
+  // ---------- Vista: PRÁCTICA (escribir + corregir) ----------
+  return(
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+        <button onClick={backToPath} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,padding:0}}>← Ruta</button>
+        {pathStep&&<span style={{fontSize:12,color:C.inkSoft}}>{pathStep.typeLabel} · {pathStep.tenseLabel} · {stepHits(progress,pathStep.id)}/{MASTERY_TARGET}</span>}
+      </div>
+
+      {loadingPrompt&&<p style={{fontSize:14,color:C.inkSoft}}>Preparando ejercicio…</p>}
+      {error&&!prompt&&<p style={{fontSize:14,color:C.coral,marginTop:8}}>{error}</p>}
 
       {prompt&&(
         <div className="fadein" style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:18,padding:20}}>
@@ -2467,11 +2597,20 @@ function Write({state,registerActivity}){
 
           {!feedback?(
             <>
-              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:6}}>Tipo de oración</p>
-              <ChipRow options={SENTENCE_TYPES} value={sentenceType} onChange={v=>{setSentenceType(v);resetSentence();}}/>
-
-              <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,margin:"14px 0 6px"}}>Tiempo verbal</p>
-              <ChipRow options={availableTenses} value={activeTense} onChange={v=>{setTense(v);resetSentence();}}/>
+              {/* En modo libre se puede elegir; en ruta el tipo/tiempo vienen fijos */}
+              {!pathStep&&(
+                <>
+                  <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:6}}>Tipo de oración</p>
+                  <ChipRow options={SENTENCE_TYPES} value={sentenceType} onChange={v=>{setSentenceType(v);resetSentence();}}/>
+                  <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,margin:"14px 0 6px"}}>Tiempo verbal</p>
+                  <ChipRow options={availableTenses} value={activeTense} onChange={v=>{setTense(v);resetSentence();}}/>
+                </>
+              )}
+              {pathStep&&(
+                <div style={{display:"inline-block",padding:"6px 12px",borderRadius:999,background:C.blueSoft,color:C.blue,fontWeight:700,fontSize:13,marginBottom:4}}>
+                  {pathStep.typeLabel} · {pathStep.tenseLabel}
+                </div>
+              )}
 
               <div style={{marginTop:14}}>
                 <FormulaCard tenseId={activeTense} typeId={sentenceType}/>
@@ -2500,9 +2639,9 @@ function Write({state,registerActivity}){
               )}
 
               <div style={{display:"flex",gap:8,marginTop:14}}>
-                <button onClick={()=>newPrompt()} disabled={loadingReview}
+                <button onClick={backToPath} disabled={loadingReview}
                   style={{padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:600,fontSize:13}}>
-                  Cambiar escenario
+                  ← Ruta
                 </button>
                 <button onClick={submit} disabled={loadingReview||!sentence.trim()}
                   style={{flex:1,padding:"10px 14px",borderRadius:10,border:"none",background:C.blue,color:"#fff",fontWeight:700,fontSize:14,opacity:(loadingReview||!sentence.trim())?0.6:1}}>
@@ -2512,6 +2651,12 @@ function Write({state,registerActivity}){
             </>
           ):(
             <div className="fadein">
+              {justMastered&&(
+                <div style={{background:C.greenSoft,border:`1px solid ${C.green}`,borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+                  <p style={{fontWeight:700,color:C.green,margin:0}}>🎉 ¡Estructura dominada!</p>
+                  <p style={{fontSize:13,color:C.ink,margin:"3px 0 0"}}>Aplicaste bien {pathStep?.typeLabel.toLowerCase()} en {pathStep?.tenseLabel.toLowerCase()} {MASTERY_TARGET} veces. Se desbloqueó la siguiente.</p>
+                </div>
+              )}
               <div style={{background:C.paper,borderRadius:12,padding:"10px 14px",marginBottom:10}}>
                 <p style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Tu oración ({feedback.typeLabel} · {feedback.tenseLabel})</p>
                 <p style={{fontFamily:FEN,fontSize:15,color:C.inkSoft,lineHeight:1.5}}>{feedback.sentence}</p>
@@ -2547,12 +2692,24 @@ function Write({state,registerActivity}){
               {error&&<p style={{fontSize:13,color:C.coral,marginTop:10}}>{error}</p>}
 
               <div style={{display:"flex",gap:8,marginTop:8}}>
-                <button onClick={resetSentence} style={{flex:1,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.line}`,background:"transparent",color:C.ink,fontWeight:600,fontSize:13}}>
-                  🔁 Otra estructura
-                </button>
-                <button onClick={()=>newPrompt()} style={{flex:1,padding:"10px 14px",borderRadius:10,border:"none",background:C.blue,color:"#fff",fontWeight:700,fontSize:13}}>
-                  Nuevo escenario
-                </button>
+                {pathStep&&!isStepMastered(progress,pathStep.id)?(
+                  <button onClick={()=>startPathStep(pathStep)} style={{flex:1,padding:"10px 14px",borderRadius:10,border:"none",background:C.blue,color:"#fff",fontWeight:700,fontSize:13}}>
+                    Practicar otra vez ({stepHits(progress,pathStep.id)}/{MASTERY_TARGET})
+                  </button>
+                ):pathStep?(
+                  <button onClick={backToPath} style={{flex:1,padding:"10px 14px",borderRadius:10,border:"none",background:C.green,color:"#fff",fontWeight:700,fontSize:13}}>
+                    ✅ Volver a la ruta
+                  </button>
+                ):(
+                  <>
+                    <button onClick={()=>{setFeedback(null);setSentence("");setIdeas([]);}} style={{flex:1,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.line}`,background:"transparent",color:C.ink,fontWeight:600,fontSize:13}}>
+                      🔁 Otra oración
+                    </button>
+                    <button onClick={()=>newPrompt()} style={{flex:1,padding:"10px 14px",borderRadius:10,border:"none",background:C.blue,color:"#fff",fontWeight:700,fontSize:13}}>
+                      Nuevo escenario
+                    </button>
+                  </>
+                )}
               </div>
               <button onClick={()=>setSheet(buildSheet())}
                 style={{width:"100%",marginTop:8,padding:"11px 14px",borderRadius:10,border:`1.5px dashed ${C.green}`,background:"transparent",color:C.green,fontWeight:700,fontSize:13}}>
