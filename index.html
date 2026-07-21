@@ -4463,18 +4463,21 @@ function makeSpeedRound(allWords,cfg,blockOf){
 // 🎮 JUEGOS — hub con selector entre los distintos juegos
 // ============================================================
 function Games({registerActivity,state}){
-  const [game,setGame]=useSubRoute("phrases/speed"); // null = menú · "speed" · "audio" · "grammar"
+  const [game,setGame]=useSubRoute("phrases/speed"); // null = menú · "speed" · "audio" · "grammar" · "swipe"
   const GAMES=[
     {id:"speed",emoji:"⏱️",title:"Contrarreloj",desc:"Traduce a máxima velocidad contra el reloj.",
       accent:C.blue,soft:C.blueSoft,record:()=>Math.max(loadSpeedBest("easy"),loadSpeedBest("medium"),loadSpeedBest("hard")),recordLabel:"récord"},
     {id:"audio",emoji:"🎧",title:"Escucha y elige",desc:"Oye la palabra en inglés y elige su significado.",
       accent:C.green,soft:C.greenSoft,record:()=>loadAudioBest(),recordLabel:`de ${AUDIO_ROUNDS}`},
+    {id:"swipe",emoji:"👉",title:"Deslizar",desc:"¿Es correcta la traducción? Desliza ✅ o ❌ lo más rápido que puedas.",
+      accent:C.coral,soft:C.coralSoft,record:()=>loadSwipeBest(),recordLabel:"récord"},
     {id:"grammar",emoji:"📝",title:"Quiz",desc:"Preguntas de gramática y uso, a tu nivel.",
       accent:C.blue,soft:C.blueSoft,record:null,recordLabel:null},
   ];
   const back=<button onClick={()=>setGame(null)} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,padding:"0 0 10px"}}>← Juegos</button>;
   if(game==="speed")   return <div>{back}<SpeedGame registerActivity={registerActivity} state={state}/></div>;
   if(game==="audio")   return <div>{back}<AudioGame registerActivity={registerActivity} state={state}/></div>;
+  if(game==="swipe")   return <div>{back}<SwipeGame registerActivity={registerActivity} state={state}/></div>;
   if(game==="grammar") return <div>{back}<Grammar state={state} registerActivity={registerActivity}/></div>;
   return(
     <div className="fadein">
@@ -4642,6 +4645,222 @@ function AudioGame({registerActivity,state}){
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// 👉 DESLIZAR — ¿es correcta la traducción? swipe ✅/❌ estilo Tinder
+// ============================================================
+function swipeBestKey(){return "fluido-swipe-best";}
+function loadSwipeBest(){try{return JSON.parse(localStorage.getItem(swipeBestKey())||"0")||0;}catch(e){return 0;}}
+function saveSwipeBest(n){try{localStorage.setItem(swipeBestKey(),JSON.stringify(n));}catch(e){}}
+const SWIPE_DURATION=60;
+function makeSwipeRound(allWords){
+  const target=allWords[Math.floor(Math.random()*allWords.length)];
+  const isCorrect=Math.random()<0.5;
+  let es=target.es;
+  if(!isCorrect){
+    let decoy;
+    do{ decoy=allWords[Math.floor(Math.random()*allWords.length)]; }while(decoy.es===target.es);
+    es=decoy.es;
+  }
+  return {en:target.en, es, isCorrect};
+}
+function SwipeGame({registerActivity,state}){
+  const allWords=React.useMemo(()=>{
+    const lvl=state?.level||"B1";
+    const maxBlock=(lvl==="A0")?10:(lvl==="A2")?18:BANK_WORDS.length;
+    const seen=new Set();const out=[];
+    BANK_WORDS.filter(b=>b.n<=maxBlock).forEach(b=>b.words.forEach(w=>{
+      const k=(w.en||"").toLowerCase();
+      if(w.en&&w.es&&!seen.has(k)){seen.add(k);out.push(w);}
+    }));
+    return out;
+  },[state?.level]);
+
+  const [phase,setPhase]=useState("idle"); // idle · playing · done
+  const [score,setScore]=useState(0);
+  const [best,setBest]=useState(loadSwipeBest());
+  const [timeLeft,setTimeLeft]=useState(SWIPE_DURATION);
+  const [round,setRound]=useState(null);
+  const [streak,setStreak]=useState(0);
+  const [newRecord,setNewRecord]=useState(false);
+  const [misses,setMisses]=useState([]);
+  const [sheet,setSheet]=useState(null);
+  const [confirmQuit,setConfirmQuit]=useState(false);
+  const [dragX,setDragX]=useState(0);
+  const [judged,setJudged]=useState(null); // 'right' · 'left' · null (animación de salida)
+  const timerRef=useRef(null);
+  const draggingRef=useRef(false);
+  const startXRef=useRef(0);
+
+  const endGame=(finalScore)=>{
+    clearInterval(timerRef.current);
+    setPhase("done");
+    const prev=loadSwipeBest();
+    if(finalScore>prev){ setBest(finalScore); saveSwipeBest(finalScore); setNewRecord(true); }
+    else{ setBest(prev); }
+    registerActivity("phrases");
+  };
+
+  const start=()=>{
+    setScore(0);setStreak(0);setNewRecord(false);setTimeLeft(SWIPE_DURATION);setMisses([]);setSheet(null);setConfirmQuit(false);setDragX(0);setJudged(null);
+    setRound(makeSwipeRound(allWords));setPhase("playing");
+    clearInterval(timerRef.current);
+    timerRef.current=setInterval(()=>{
+      setTimeLeft(t=>{ if(t<=1){ endGame_ref.current(); return 0; } return t-1; });
+    },1000);
+  };
+  const scoreRef=useRef(0); useEffect(()=>{scoreRef.current=score;},[score]);
+  const endGame_ref=useRef(()=>{}); useEffect(()=>{endGame_ref.current=()=>endGame(scoreRef.current);});
+  useEffect(()=>()=>clearInterval(timerRef.current),[]);
+
+  const quit=()=>{ endGame(scoreRef.current); };
+
+  const judge=(guessCorrect)=>{
+    if(!round||judged) return;
+    const right=guessCorrect===round.isCorrect;
+    setJudged(guessCorrect?"right":"left");
+    if(right){ setScore(s=>s+1); setStreak(s=>s+1); }
+    else{
+      setStreak(0);
+      setMisses(m=>m.some(x=>x.en===round.en&&x.es===round.es)?m:[...m,{en:round.en,es:round.es,wasCorrect:round.isCorrect}]);
+      sesNote("👉 Deslizar",{head:`${round.en} = ${round.es}`,sub:round.isCorrect?"Era correcta":"Era falsa",note:"juzgada mal"});
+    }
+    setTimeout(()=>{ setJudged(null); setDragX(0); setRound(makeSwipeRound(allWords)); },260);
+  };
+
+  // Arrastre real vía Pointer Events (funciona igual con touch y con mouse).
+  const onPointerDown=(e)=>{
+    if(judged) return;
+    draggingRef.current=true;
+    startXRef.current=e.clientX;
+    try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(err){}
+  };
+  const onPointerMove=(e)=>{
+    if(!draggingRef.current||judged) return;
+    setDragX(e.clientX-startXRef.current);
+  };
+  const endDrag=()=>{
+    if(!draggingRef.current) return;
+    draggingRef.current=false;
+    if(dragX>90) judge(true);
+    else if(dragX<-90) judge(false);
+    else setDragX(0);
+  };
+
+  if(phase==="idle"){
+    return(
+      <div className="fadein" style={{textAlign:"center",padding:"10px 0"}}>
+        <div style={{fontSize:44,marginBottom:8}}>👉</div>
+        <h3 style={{fontSize:20,fontWeight:800,margin:"0 0 6px"}}>Deslizar</h3>
+        <p style={{fontSize:14,color:C.inkSoft,margin:"0 0 16px",lineHeight:1.5}}>Verás una palabra en inglés con una traducción. Desliza la tarjeta a la derecha (✅) si es correcta, o a la izquierda (❌) si es falsa. {SWIPE_DURATION} segundos, todas las que puedas.</p>
+        <div style={{display:"inline-flex",gap:8,alignItems:"center",background:C.card,border:`1px solid ${C.line}`,borderRadius:999,padding:"8px 16px",marginBottom:20}}>
+          <span style={{fontSize:13,color:C.inkSoft}}>🏆 Tu récord:</span>
+          <span style={{fontWeight:800,fontSize:16,color:C.coral}}>{best}</span>
+        </div>
+        <BigButton onClick={start}>▶️ Empezar</BigButton>
+      </div>
+    );
+  }
+
+  if(phase==="done"){
+    return(
+      <div className="fadein" style={{textAlign:"center",padding:"10px 0"}}>
+        {newRecord&&<div style={{fontSize:40,marginBottom:4}}>🎉</div>}
+        <h3 style={{fontSize:22,fontWeight:800,margin:"0 0 4px"}}>{newRecord?"¡Nuevo récord!":"¡Tiempo!"}</h3>
+        <p style={{fontSize:15,color:C.inkSoft,margin:"0 0 16px"}}>Juzgaste bien <strong style={{color:C.ink}}>{score}</strong> {score===1?"vez":"veces"} en {SWIPE_DURATION}s.</p>
+        <div style={{display:"flex",gap:10,justifyContent:"center",marginBottom:20}}>
+          <div style={{background:C.coralSoft,borderRadius:14,padding:"12px 20px"}}>
+            <div style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Puntaje</div>
+            <div style={{fontSize:24,fontWeight:800,color:C.coral}}>{score}</div>
+          </div>
+          <div style={{background:C.greenSoft,borderRadius:14,padding:"12px 20px"}}>
+            <div style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Récord</div>
+            <div style={{fontSize:24,fontWeight:800,color:C.green}}>{best}</div>
+          </div>
+        </div>
+        <BigButton onClick={start}>🔁 Jugar de nuevo</BigButton>
+        {misses.length>0&&(
+          <button onClick={()=>setSheet(misses.map(w=>({head:`${w.en} = ${w.es}`,sub:w.wasCorrect?"Era correcta y dijiste que no":"Era falsa y dijiste que sí",note:"repásala"})))}
+            style={{marginTop:10,width:"100%",padding:"12px",borderRadius:14,border:`1.5px dashed ${C.green}`,background:"transparent",color:C.green,fontWeight:700,fontSize:14}}>
+            📋 Cheat sheet de las {misses.length} que fallaste
+          </button>
+        )}
+        <button onClick={()=>setPhase("idle")} style={{marginTop:10,width:"100%",padding:"12px",borderRadius:14,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:600,fontSize:14}}>Volver</button>
+        {sheet&&<CheatSheet title="Cheat sheet · Deslizar" items={sheet} level={state.level} withTips={true} onClose={()=>setSheet(null)}/>}
+      </div>
+    );
+  }
+
+  // phase === "playing"
+  const pct=(timeLeft/SWIPE_DURATION)*100;
+  const low=timeLeft<=10;
+  const rot=Math.max(-18,Math.min(18,dragX/10));
+  const cardBg = (judged==="right"||dragX>40)?C.greenSoft : (judged==="left"||dragX<-40)?C.coralSoft : C.card;
+  const cardBorder = (judged==="right"||dragX>40)?C.green : (judged==="left"||dragX<-40)?C.coral : C.line;
+  return(
+    <div className="fadein">
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+        <span style={{fontSize:14,fontWeight:700,color:C.ink}}>⭐ {score}</span>
+        {streak>=3&&<span style={{fontSize:12,fontWeight:700,color:C.green}}>🔥 racha {streak}</span>}
+        <span style={{fontSize:14,fontWeight:800,color:low?C.coral:C.inkSoft}}>{timeLeft}s</span>
+      </div>
+      <div style={{height:6,borderRadius:99,background:C.line,overflow:"hidden",marginBottom:18}}>
+        <div style={{height:"100%",width:`${pct}%`,background:low?C.coral:C.blue,borderRadius:99,transition:"width 1s linear"}}/>
+      </div>
+
+      <div style={{position:"relative",height:190,marginBottom:18,touchAction:"none"}}>
+        {round&&(
+          <div
+            onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag}
+            style={{
+              position:"absolute",inset:0,background:cardBg,border:`2px solid ${cardBorder}`,borderRadius:20,
+              display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20,
+              cursor:"grab",userSelect:"none",touchAction:"none",
+              transform:`translateX(${judged==="right"?400:judged==="left"?-400:dragX}px) rotate(${judged==="right"?20:judged==="left"?-20:rot}deg)`,
+              opacity:judged?0:1,
+              transition:draggingRef.current?"none":"transform .25s ease, opacity .2s ease"
+            }}>
+            <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,margin:"0 0 10px"}}>¿Es correcta esta traducción?</p>
+            <p style={{fontSize:24,fontWeight:800,color:C.ink,margin:"0 0 6px",fontFamily:FEN,textAlign:"center"}}>{round.en}</p>
+            <p style={{fontSize:16,color:C.inkSoft,margin:0}}>=</p>
+            <p style={{fontSize:22,fontWeight:700,color:C.ink,margin:"6px 0 0",fontFamily:FEN,textAlign:"center"}}>{round.es}</p>
+            {dragX>40&&!judged&&<span style={{position:"absolute",top:14,right:14,fontSize:28}}>✅</span>}
+            {dragX<-40&&!judged&&<span style={{position:"absolute",top:14,left:14,fontSize:28}}>❌</span>}
+          </div>
+        )}
+      </div>
+
+      <div style={{display:"flex",gap:14,justifyContent:"center"}}>
+        <button onClick={()=>judge(false)} disabled={!!judged}
+          style={{width:64,height:64,borderRadius:"50%",border:`2px solid ${C.coral}`,background:C.card,fontSize:26,color:C.coral}}>❌</button>
+        <button onClick={()=>judge(true)} disabled={!!judged}
+          style={{width:64,height:64,borderRadius:"50%",border:`2px solid ${C.green}`,background:C.card,fontSize:26,color:C.green}}>✅</button>
+      </div>
+      <p style={{textAlign:"center",fontSize:12,color:C.inkSoft,margin:"10px 0 0"}}>Desliza la tarjeta o toca un botón</p>
+
+      <div style={{marginTop:22,paddingTop:16,borderTop:`1px solid ${C.line}`}}>
+        {!confirmQuit?(
+          <button onClick={()=>setConfirmQuit(true)} style={{width:"100%",padding:"11px",borderRadius:12,border:"none",background:"transparent",color:C.coral,fontWeight:600,fontSize:13}}>
+            ✕ Abandonar partida
+          </button>
+        ):(
+          <div className="fadein" style={{background:C.coralSoft,border:`1.5px solid ${C.coral}`,borderRadius:14,padding:14,textAlign:"center"}}>
+            <p style={{margin:"0 0 10px",fontSize:14,fontWeight:600,color:C.ink}}>¿Seguro que quieres abandonar?</p>
+            <p style={{margin:"0 0 12px",fontSize:12,color:C.inkSoft}}>Perderás el progreso de esta partida.</p>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>setConfirmQuit(false)} style={{flex:1,padding:"11px",borderRadius:10,border:`1.5px solid ${C.line}`,background:C.card,color:C.ink,fontWeight:600,fontSize:13}}>
+                Seguir jugando
+              </button>
+              <button onClick={quit} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:C.coral,color:"#fff",fontWeight:700,fontSize:13}}>
+                Sí, abandonar
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
