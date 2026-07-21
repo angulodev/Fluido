@@ -4340,62 +4340,83 @@ function VerbExamples({card,level}){
 }
 
 // ============================================================
-// ⏱️ CONTRARRELOJ — juego de velocidad de vocabulario
+// ⏱️ CONTRARRELOJ — juego de velocidad con niveles de dificultad
 // ============================================================
-function speedBestKey(){return "fluido-speed-best";}
-function loadSpeedBest(){try{return JSON.parse(localStorage.getItem(speedBestKey())||"0")||0;}catch(e){return 0;}}
-function saveSpeedBest(n){try{localStorage.setItem(speedBestKey(),JSON.stringify(n));}catch(e){}}
-const SPEED_DURATION=60; // segundos
+// Récord por nivel de juego: fluido-speed-best-{easy|medium|hard}
+function speedBestKey(diff){return "fluido-speed-best-"+diff;}
+function loadSpeedBest(diff){try{return JSON.parse(localStorage.getItem(speedBestKey(diff))||"0")||0;}catch(e){return 0;}}
+function saveSpeedBest(diff,n){try{localStorage.setItem(speedBestKey(diff),JSON.stringify(n));}catch(e){}}
+const SPEED_LEVELS={
+  easy:  {id:"easy",  label:"Fácil",   emoji:"🟢", duration:75, options:3, similar:false, blurb:"3 opciones · 75s · palabras comunes"},
+  medium:{id:"medium",label:"Medio",   emoji:"🟡", duration:60, options:4, similar:false, blurb:"4 opciones · 60s"},
+  hard:  {id:"hard",  label:"Difícil", emoji:"🔴", duration:45, options:4, similar:true,  blurb:"4 opciones · 45s · distractores parecidos"},
+};
 function shuffle(arr){const a=[...arr];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
-// Genera una ronda: palabra objetivo (es→en) + 4 opciones (1 correcta, 3 distractores del banco).
-function makeSpeedRound(allWords){
+// Ronda: objetivo + N opciones. En difícil, los distractores salen del mismo bloque temático (más parecidos).
+function makeSpeedRound(allWords,cfg,blockOf){
   const target=allWords[Math.floor(Math.random()*allWords.length)];
-  const pool=shuffle(allWords.filter(w=>w.en!==target.en)).slice(0,3);
+  let distractorPool=allWords.filter(w=>w.en!==target.en);
+  if(cfg.similar&&blockOf){
+    const sameBlock=distractorPool.filter(w=>blockOf[w.en.toLowerCase()]===blockOf[target.en.toLowerCase()]);
+    if(sameBlock.length>=cfg.options-1) distractorPool=sameBlock;
+  }
+  const pool=shuffle(distractorPool).slice(0,cfg.options-1);
   const options=shuffle([target,...pool]);
   return {target,options};
 }
 function SpeedGame({registerActivity,state}){
-  // Aplana todas las palabras del banco una sola vez.
-  const allWords=React.useMemo(()=>{
-    const seen=new Set();const out=[];
-    BANK_WORDS.forEach(b=>b.words.forEach(w=>{const k=(w.en||"").toLowerCase();if(w.en&&w.es&&!seen.has(k)){seen.add(k);out.push(w);}}));
-    return out;
-  },[]);
+  // Pool filtrado por nivel de inglés: A0/A2 → primeros bloques (palabras más comunes); B1+ → todo el banco.
+  const {allWords,blockOf}=React.useMemo(()=>{
+    const lvl=state?.level||"B1";
+    const maxBlock=(lvl==="A0")?10:(lvl==="A2")?18:BANK_WORDS.length;
+    const seen=new Set();const out=[];const bo={};
+    BANK_WORDS.filter(b=>b.n<=maxBlock).forEach(b=>b.words.forEach(w=>{
+      const k=(w.en||"").toLowerCase();
+      if(w.en&&w.es&&!seen.has(k)){seen.add(k);out.push(w);bo[k]=b.n;}
+    }));
+    return {allWords:out,blockOf:bo};
+  },[state?.level]);
+
+  const [diff,setDiff]=useState("medium");
+  const cfg=SPEED_LEVELS[diff];
   const [phase,setPhase]=useState("idle"); // idle · playing · done
   const [score,setScore]=useState(0);
-  const [best,setBest]=useState(loadSpeedBest());
-  const [timeLeft,setTimeLeft]=useState(SPEED_DURATION);
+  const [best,setBest]=useState(loadSpeedBest("medium"));
+  const [timeLeft,setTimeLeft]=useState(cfg.duration);
   const [round,setRound]=useState(null);
-  const [picked,setPicked]=useState(null); // {en, correct} feedback breve
+  const [picked,setPicked]=useState(null);
   const [streak,setStreak]=useState(0);
   const [newRecord,setNewRecord]=useState(false);
-  const [misses,setMisses]=useState([]); // palabras falladas en la partida
+  const [misses,setMisses]=useState([]);
   const [sheet,setSheet]=useState(null);
   const {speak}=useSpeech();
   const timerRef=useRef(null);
 
+  // Al cambiar de dificultad en la pantalla inicial, refresca el récord mostrado.
+  useEffect(()=>{ if(phase==="idle") setBest(loadSpeedBest(diff)); },[diff,phase]);
+
   const endGame=(finalScore)=>{
     clearInterval(timerRef.current);
     setPhase("done");
-    if(finalScore>best){ setBest(finalScore); saveSpeedBest(finalScore); setNewRecord(true); }
+    const prev=loadSpeedBest(diff);
+    if(finalScore>prev){ setBest(finalScore); saveSpeedBest(diff,finalScore); setNewRecord(true); }
+    else { setBest(prev); }
     registerActivity("phrases");
   };
 
   const start=()=>{
-    setScore(0);setStreak(0);setNewRecord(false);setTimeLeft(SPEED_DURATION);setPicked(null);setMisses([]);setSheet(null);
-    setRound(makeSpeedRound(allWords));setPhase("playing");
+    setScore(0);setStreak(0);setNewRecord(false);setTimeLeft(cfg.duration);setPicked(null);setMisses([]);setSheet(null);
+    setRound(makeSpeedRound(allWords,cfg,blockOf));setPhase("playing");
     clearInterval(timerRef.current);
     timerRef.current=setInterval(()=>{
-      setTimeLeft(t=>{
-        if(t<=1){ endGame_ref.current(); return 0; }
-        return t-1;
-      });
+      setTimeLeft(t=>{ if(t<=1){ endGame_ref.current(); return 0; } return t-1; });
     },1000);
   };
-  // Ref para leer el score actual al terminar por tiempo, sin recrear el intervalo.
   const scoreRef=useRef(0); useEffect(()=>{scoreRef.current=score;},[score]);
   const endGame_ref=useRef(()=>{}); useEffect(()=>{endGame_ref.current=()=>endGame(scoreRef.current);});
   useEffect(()=>()=>clearInterval(timerRef.current),[]);
+
+  const quit=()=>{ endGame(scoreRef.current); }; // abandonar → resultados con lo que llevas
 
   const answer=(opt)=>{
     if(phase!=="playing"||picked) return;
@@ -4404,11 +4425,10 @@ function SpeedGame({registerActivity,state}){
     if(correct){ setScore(s=>s+1); setStreak(s=>s+1); }
     else{
       setStreak(0);
-      // Registra la palabra fallada: en la sesión de estudio y para el cheat sheet.
       setMisses(m=>m.some(x=>x.en===round.target.en)?m:[...m,{en:round.target.en,es:round.target.es}]);
       sesNote("⏱️ Juego",{head:round.target.en,sub:round.target.es,note:"palabra fallada"});
     }
-    setTimeout(()=>{ setPicked(null); setRound(makeSpeedRound(allWords)); },420);
+    setTimeout(()=>{ setPicked(null); setRound(makeSpeedRound(allWords,cfg,blockOf)); },420);
   };
 
   if(phase==="idle"){
@@ -4416,12 +4436,27 @@ function SpeedGame({registerActivity,state}){
       <div className="fadein" style={{textAlign:"center",padding:"10px 0"}}>
         <div style={{fontSize:44,marginBottom:8}}>⏱️</div>
         <h3 style={{fontSize:20,fontWeight:800,margin:"0 0 6px"}}>Contrarreloj</h3>
-        <p style={{fontSize:14,color:C.inkSoft,margin:"0 0 16px",lineHeight:1.5}}>Traduce la mayor cantidad de palabras en {SPEED_DURATION} segundos. Elige la traducción correcta lo más rápido que puedas.</p>
-        <div style={{display:"inline-flex",gap:8,alignItems:"center",background:C.card,border:`1px solid ${C.line}`,borderRadius:999,padding:"8px 16px",marginBottom:20}}>
-          <span style={{fontSize:13,color:C.inkSoft}}>🏆 Tu récord:</span>
-          <span style={{fontWeight:800,fontSize:16,color:C.blue}}>{best}</span>
+        <p style={{fontSize:14,color:C.inkSoft,margin:"0 0 16px",lineHeight:1.5}}>Traduce la mayor cantidad de palabras posible. Elige la traducción correcta lo más rápido que puedas.</p>
+
+        <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,fontWeight:700,margin:"0 0 8px",textAlign:"left"}}>Dificultad</p>
+        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+          {Object.values(SPEED_LEVELS).map(l=>(
+            <button key={l.id} onClick={()=>setDiff(l.id)}
+              style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"12px 14px",borderRadius:14,
+                border:`1.5px solid ${diff===l.id?C.blue:C.line}`,background:diff===l.id?C.blueSoft:C.card,textAlign:"left"}}>
+              <span style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:16}}>{l.emoji}</span>
+                <span>
+                  <span style={{display:"block",fontWeight:700,fontSize:15,color:diff===l.id?C.blue:C.ink}}>{l.label}</span>
+                  <span style={{display:"block",fontSize:11,color:C.inkSoft}}>{l.blurb}</span>
+                </span>
+              </span>
+              <span style={{fontSize:11,color:C.inkSoft,fontWeight:600,whiteSpace:"nowrap"}}>🏆 {loadSpeedBest(l.id)}</span>
+            </button>
+          ))}
         </div>
-        <BigButton onClick={start}>▶️ Empezar</BigButton>
+        <p style={{fontSize:11,color:C.inkSoft,margin:"0 0 16px"}}>Las palabras se ajustan a tu nivel ({state?.level||"B1"}).</p>
+        <BigButton onClick={start}>▶️ Empezar {cfg.emoji}</BigButton>
       </div>
     );
   }
@@ -4430,15 +4465,15 @@ function SpeedGame({registerActivity,state}){
     return(
       <div className="fadein" style={{textAlign:"center",padding:"10px 0"}}>
         {newRecord&&<div style={{fontSize:40,marginBottom:4}}>🎉</div>}
-        <h3 style={{fontSize:22,fontWeight:800,margin:"0 0 4px"}}>{newRecord?"¡Nuevo récord!":"¡Tiempo!"}</h3>
-        <p style={{fontSize:15,color:C.inkSoft,margin:"0 0 16px"}}>Acertaste <strong style={{color:C.ink}}>{score}</strong> {score===1?"palabra":"palabras"} en {SPEED_DURATION}s.</p>
-        <div style={{display:"flex",gap:10,justifyContent:"center",marginBottom:20}}>
+        <h3 style={{fontSize:22,fontWeight:800,margin:"0 0 4px"}}>{newRecord?"¡Nuevo récord!":"¡Fin de la partida!"}</h3>
+        <p style={{fontSize:15,color:C.inkSoft,margin:"0 0 4px"}}>Acertaste <strong style={{color:C.ink}}>{score}</strong> {score===1?"palabra":"palabras"} · {cfg.emoji} {cfg.label}</p>
+        <div style={{display:"flex",gap:10,justifyContent:"center",margin:"16px 0 20px"}}>
           <div style={{background:C.blueSoft,borderRadius:14,padding:"12px 20px"}}>
             <div style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Puntaje</div>
             <div style={{fontSize:24,fontWeight:800,color:C.blue}}>{score}</div>
           </div>
           <div style={{background:C.greenSoft,borderRadius:14,padding:"12px 20px"}}>
-            <div style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Récord</div>
+            <div style={{fontSize:11,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1}}>Récord {cfg.label}</div>
             <div style={{fontSize:24,fontWeight:800,color:C.green}}>{best}</div>
           </div>
         </div>
@@ -4449,14 +4484,14 @@ function SpeedGame({registerActivity,state}){
             📋 Cheat sheet de las {misses.length} que fallaste
           </button>
         )}
-        <button onClick={()=>setPhase("idle")} style={{marginTop:10,width:"100%",padding:"12px",borderRadius:14,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:600,fontSize:14}}>Volver</button>
+        <button onClick={()=>setPhase("idle")} style={{marginTop:10,width:"100%",padding:"12px",borderRadius:14,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:600,fontSize:14}}>Cambiar dificultad</button>
         {sheet&&<CheatSheet title="Cheat sheet · Palabras falladas" items={sheet} level={state.level} withTips={true} onClose={()=>setSheet(null)}/>}
       </div>
     );
   }
 
   // phase === "playing"
-  const pct=(timeLeft/SPEED_DURATION)*100;
+  const pct=(timeLeft/cfg.duration)*100;
   const low=timeLeft<=10;
   return(
     <div className="fadein">
@@ -4465,7 +4500,7 @@ function SpeedGame({registerActivity,state}){
         {streak>=3&&<span style={{fontSize:12,fontWeight:700,color:C.green}}>🔥 racha {streak}</span>}
         <span style={{fontSize:14,fontWeight:800,color:low?C.coral:C.inkSoft}}>{timeLeft}s</span>
       </div>
-      <div style={{height:6,borderRadius:99,background:C.line,overflow:"hidden",marginBottom:18}}>
+      <div style={{height:6,borderRadius:99,background:C.line,overflow:"hidden",marginBottom:14}}>
         <div style={{height:"100%",width:`${pct}%`,background:low?C.coral:C.blue,borderRadius:99,transition:"width 1s linear"}}/>
       </div>
 
@@ -4474,7 +4509,7 @@ function SpeedGame({registerActivity,state}){
         <p style={{fontSize:26,fontWeight:800,color:C.ink,margin:0,fontFamily:FEN}}>{round.target.es}</p>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <div style={{display:"grid",gridTemplateColumns:cfg.options===3?"1fr":"1fr 1fr",gap:10}}>
         {round.options.map((opt,i)=>{
           let bg=C.card,border=C.line,color=C.ink;
           if(picked){
@@ -4489,6 +4524,10 @@ function SpeedGame({registerActivity,state}){
           );
         })}
       </div>
+
+      <button onClick={quit} style={{width:"100%",marginTop:14,padding:"11px",borderRadius:12,border:`1.5px solid ${C.line}`,background:"transparent",color:C.inkSoft,fontWeight:600,fontSize:13}}>
+        ✕ Abandonar partida
+      </button>
     </div>
   );
 }
