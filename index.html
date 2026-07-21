@@ -482,7 +482,7 @@ function AudioWarning(){
 // ============================================================
 // APP RAÍZ
 // ============================================================
-const APP_TABS=["home","talk","phrases","grammar","listen","write","levelcheck","settings"];
+const APP_TABS=["home","practice","talk","phrases","grammar","listen","write","levelcheck","settings"];
 const tabFromHash=()=>{try{const h=(location.hash||"").replace(/^#\/?/,"");return APP_TABS.includes(h)?h:"home";}catch(e){return "home";}};
 function App(){
   const [state,setState]=useState(loadState);
@@ -592,6 +592,7 @@ function App(){
       <div style={{flex:1,minWidth:0}}>
         <div style={{width:"100%",maxWidth:desktop?780:560,margin:"0 auto",padding:desktop?"36px 32px 60px":"20px 16px 96px"}}>
         {tab==="home"     && <Home     state={state} save={save} go={setTab}/>}
+        {tab==="practice" && <Practice state={state} registerActivity={registerActivity}/>}
         {tab==="talk"     && <Talk     state={state} registerActivity={registerActivity}/>}
         {(tab==="phrases"||tab==="grammar") && <Phrases key={tab} initialMode={tab==="grammar"?"grammar":null} state={state} save={save} registerActivity={registerActivity}/>}
         {tab==="listen"   && <ListenHub state={state} save={save} registerActivity={registerActivity}/>}
@@ -859,7 +860,7 @@ function profileForPrompts(state,withName){
 // ============================================================
 function SideNav({tab,setTab,name,level}){
   const isBasic=level==="A0"||level==="A2";
-  const items=[{id:"write",icon:"✐",label:"Escribir"},{id:"talk",icon:"❝",label:"Conversar"},{id:"phrases",icon:"❏",label:isBasic?"Vocabulario":"Frases"},{id:"home",icon:"⌂",label:"Inicio"},{id:"listen",icon:"♪",label:"Escuchar"},{id:"settings",icon:"⚙",label:"Ajustes"}];
+  const items=[{id:"practice",icon:"✍",label:"Práctica"},{id:"phrases",icon:"❏",label:isBasic?"Vocabulario":"Vocab"},{id:"home",icon:"⌂",label:"Inicio"},{id:"listen",icon:"♪",label:"Escuchar"},{id:"settings",icon:"⚙",label:"Ajustes"}];
   const isActive=(id)=>tab===id||(id==="phrases"&&tab==="grammar");
   return(
     <aside style={{width:230,flexShrink:0,position:"sticky",top:0,height:"100vh",borderRight:`1px solid ${C.line}`,background:C.card,padding:"28px 14px 20px",display:"flex",flexDirection:"column"}}>
@@ -885,9 +886,9 @@ function SideNav({tab,setTab,name,level}){
 // ============================================================
 function TabBar({tab,setTab,level}){
   const isBasic=level==="A0"||level==="A2";
-  const items=[{id:"write",icon:"✐",label:"Escribir"},{id:"talk",icon:"❝",label:"Conversar"},{id:"phrases",icon:"❏",label:isBasic?"Vocab":"Frases"},{id:"home",icon:"⌂",label:"Inicio"},{id:"listen",icon:"♪",label:"Escuchar"},{id:"settings",icon:"⚙",label:"Ajustes"}];
+  const items=[{id:"practice",icon:"✍",label:"Práctica"},{id:"phrases",icon:"❏",label:"Vocab"},{id:"home",icon:"⌂",label:"Inicio"},{id:"listen",icon:"♪",label:"Escuchar"},{id:"settings",icon:"⚙",label:"Ajustes"}];
   const n=items.length;
-  const rawIdx=items.findIndex(it=>tab===it.id||(it.id==="phrases"&&tab==="grammar"));
+  const rawIdx=items.findIndex(it=>tab===it.id||(it.id==="phrases"&&tab==="grammar")||(it.id==="practice"&&(tab==="talk"||tab==="write")));
   const idx=rawIdx<0?0:rawIdx;
   const centerPct=(idx+0.5)/n*100;
   return(
@@ -1757,6 +1758,36 @@ function PronounceCheck({target}){
 
 function talkLoad(){try{return JSON.parse(sessionStorage.getItem("fluido-talk")||"null");}catch(e){return null;}}
 function talkSave(d){try{sessionStorage.setItem("fluido-talk",JSON.stringify(d));}catch(e){}}
+// ============================================================
+// ✍️ PRÁCTICA — hub que agrupa Conversar + Escribir (producción)
+// ============================================================
+function Practice({state,registerActivity}){
+  const [sub,setSub]=useState(null); // null = menú · "talk" · "write"
+  const back=<button onClick={()=>setSub(null)} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,padding:"0 0 10px"}}>← Práctica</button>;
+  if(sub==="talk")  return <div>{back}<Talk state={state} registerActivity={registerActivity}/></div>;
+  if(sub==="write") return <div>{back}<Write state={state} registerActivity={registerActivity}/></div>;
+  const CARDS=[
+    {id:"talk",emoji:"💬",title:"Conversar",desc:"Practica situaciones reales con corrección al instante.",soft:C.blueSoft},
+    {id:"write",emoji:"✍️",title:"Escribir",desc:"Domina las estructuras del inglés, una a una.",soft:C.greenSoft},
+  ];
+  return(
+    <div className="fadein">
+      <h2 style={{fontSize:24,fontWeight:700,marginBottom:4}}>Práctica</h2>
+      <p style={{fontSize:14,color:C.inkSoft,margin:"0 0 16px"}}>Produce inglés: habla en situaciones reales o construye oraciones paso a paso.</p>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        {CARDS.map(c=>(
+          <button key={c.id} onClick={()=>setSub(c.id)}
+            style={{display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center",gap:10,padding:"22px 14px",borderRadius:18,border:`1.5px solid ${C.line}`,background:C.card,minHeight:160,justifyContent:"flex-start"}}>
+            <span style={{width:56,height:56,borderRadius:16,background:c.soft,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>{c.emoji}</span>
+            <span style={{fontWeight:800,fontSize:16,color:C.ink,lineHeight:1.2}}>{c.title}</span>
+            <span style={{fontSize:12,color:C.inkSoft,lineHeight:1.35}}>{c.desc}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Talk({state,registerActivity}){
   const saved=talkLoad();
   const [scenario,setScenario]=useState(saved?.scenario||null);
