@@ -2081,12 +2081,12 @@ function Phrases({state,save,registerActivity,initialMode}){
       })()}
 
       {/* Botón volver cuando hay una sección activa */}
-      {mode&&!initialMode&&<button onClick={()=>setMode(null)} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,padding:"0 0 12px"}}>← Vocabulario</button>}
+      {mode&&!initialMode&&mode!=="speed"&&<button onClick={()=>setMode(null)} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,padding:"0 0 12px"}}>← Vocabulario</button>}
 
       {mode==="grammar" && <Grammar state={state} registerActivity={registerActivity}/>}
       {mode==="verbs"   && <Verbs registerActivity={registerActivity} state={state}/>}
       {mode==="vocab"   && <Vocabulary registerActivity={registerActivity} state={state}/>}
-      {mode==="speed"   && <Games registerActivity={registerActivity} state={state}/>}
+      {mode==="speed"   && <Games registerActivity={registerActivity} state={state} onExit={()=>setMode(null)}/>}
       {mode==="cards" && (<div>
       <p style={{marginBottom:14,fontSize:14,color:C.inkSoft}}>Lee el español, <span className="hl">dilo en voz alta en inglés</span>, y recién ahí voltea la tarjeta.</p>
       <div style={{display:"flex",gap:10,marginBottom:14,fontSize:13,color:C.inkSoft}}>
@@ -4462,7 +4462,7 @@ function makeSpeedRound(allWords,cfg,blockOf){
 // ============================================================
 // 🎮 JUEGOS — hub con selector entre los distintos juegos
 // ============================================================
-function Games({registerActivity,state}){
+function Games({registerActivity,state,onExit}){
   const [game,setGame]=useSubRoute("phrases/speed"); // null = menú · "speed" · "audio" · "grammar" · "swipe"
   const GAMES=[
     {id:"speed",emoji:"⏱️",title:"Contrarreloj",desc:"Traduce a máxima velocidad contra el reloj.",
@@ -4481,6 +4481,7 @@ function Games({registerActivity,state}){
   if(game==="grammar") return <div>{back}<Grammar state={state} registerActivity={registerActivity}/></div>;
   return(
     <div className="fadein">
+      {onExit&&<button onClick={onExit} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,padding:"0 0 12px"}}>← Vocabulario</button>}
       <p style={{fontSize:14,color:C.inkSoft,margin:"0 0 16px"}}>Elige un juego para practicar vocabulario y gramática de forma interactiva.</p>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         {GAMES.map(g=>{
@@ -4668,6 +4669,32 @@ function makeSwipeRound(allWords){
   }
   return {en:target.en, es, isCorrect};
 }
+// Tarjeta recién juzgada: aparece exactamente donde estaba (fromX) y al frame siguiente
+// vuela fuera de pantalla — dos fases para que la transición CSS sí anime.
+function SwipeExitCard({en,es,dir,fromX}){
+  const [flown,setFlown]=useState(false);
+  useEffect(()=>{
+    const id=requestAnimationFrame(()=>setFlown(true));
+    return()=>cancelAnimationFrame(id);
+  },[]);
+  const targetX=dir==="right"?420:-420;
+  const targetRot=dir==="right"?22:-22;
+  return(
+    <div aria-hidden="true" style={{
+        position:"absolute",inset:0,
+        background:dir==="right"?C.greenSoft:C.coralSoft,
+        border:`2px solid ${dir==="right"?C.green:C.coral}`,borderRadius:20,
+        display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20,
+        pointerEvents:"none",
+        transform:`translateX(${flown?targetX:fromX}px) rotate(${flown?targetRot:Math.max(-18,Math.min(18,fromX/10))}deg)`,
+        opacity:flown?0:1,
+        transition:"transform .25s ease, opacity .25s ease"
+      }}>
+      <p style={{fontSize:24,fontWeight:800,color:C.ink,margin:"0 0 6px",fontFamily:FEN,textAlign:"center"}}>{en}</p>
+      <p style={{fontSize:22,fontWeight:700,color:C.ink,margin:"6px 0 0",fontFamily:FEN,textAlign:"center"}}>{es}</p>
+    </div>
+  );
+}
 function SwipeGame({registerActivity,state}){
   const allWords=React.useMemo(()=>{
     const lvl=state?.level||"B1";
@@ -4691,10 +4718,11 @@ function SwipeGame({registerActivity,state}){
   const [sheet,setSheet]=useState(null);
   const [confirmQuit,setConfirmQuit]=useState(false);
   const [dragX,setDragX]=useState(0);
-  const [judged,setJudged]=useState(null); // 'right' · 'left' · null (animación de salida)
+  const [exitCard,setExitCard]=useState(null); // {en,es,dir:'right'|'left'} — tarjeta anterior animándose fuera, por encima de la nueva
   const timerRef=useRef(null);
   const draggingRef=useRef(false);
   const startXRef=useRef(0);
+  const exitTimerRef=useRef(null);
 
   const endGame=(finalScore)=>{
     clearInterval(timerRef.current);
@@ -4706,7 +4734,8 @@ function SwipeGame({registerActivity,state}){
   };
 
   const start=()=>{
-    setScore(0);setStreak(0);setNewRecord(false);setTimeLeft(SWIPE_DURATION);setMisses([]);setSheet(null);setConfirmQuit(false);setDragX(0);setJudged(null);
+    setScore(0);setStreak(0);setNewRecord(false);setTimeLeft(SWIPE_DURATION);setMisses([]);setSheet(null);setConfirmQuit(false);setDragX(0);setExitCard(null);
+    clearTimeout(exitTimerRef.current);
     setRound(makeSwipeRound(allWords));setPhase("playing");
     clearInterval(timerRef.current);
     timerRef.current=setInterval(()=>{
@@ -4715,32 +4744,36 @@ function SwipeGame({registerActivity,state}){
   };
   const scoreRef=useRef(0); useEffect(()=>{scoreRef.current=score;},[score]);
   const endGame_ref=useRef(()=>{}); useEffect(()=>{endGame_ref.current=()=>endGame(scoreRef.current);});
-  useEffect(()=>()=>clearInterval(timerRef.current),[]);
+  useEffect(()=>()=>{clearInterval(timerRef.current);clearTimeout(exitTimerRef.current);},[]);
 
   const quit=()=>{ endGame(scoreRef.current); };
 
+  // El round nuevo queda listo e interactivo de inmediato; el juzgado se va como capa separada
+  // encima, así nunca hay un hueco en blanco entre una tarjeta y la siguiente.
   const judge=(guessCorrect)=>{
-    if(!round||judged) return;
+    if(!round) return;
     const right=guessCorrect===round.isCorrect;
-    setJudged(guessCorrect?"right":"left");
     if(right){ setScore(s=>s+1); setStreak(s=>s+1); }
     else{
       setStreak(0);
       setMisses(m=>m.some(x=>x.en===round.en&&x.es===round.es)?m:[...m,{en:round.en,es:round.es,wasCorrect:round.isCorrect}]);
       sesNote("👉 Deslizar",{head:`${round.en} = ${round.es}`,sub:round.isCorrect?"Era correcta":"Era falsa",note:"juzgada mal"});
     }
-    setTimeout(()=>{ setJudged(null); setDragX(0); setRound(makeSwipeRound(allWords)); },260);
+    setExitCard({...round,dir:guessCorrect?"right":"left",fromX:dragX});
+    setDragX(0);
+    setRound(makeSwipeRound(allWords));
+    clearTimeout(exitTimerRef.current);
+    exitTimerRef.current=setTimeout(()=>setExitCard(null),260);
   };
 
   // Arrastre real vía Pointer Events (funciona igual con touch y con mouse).
   const onPointerDown=(e)=>{
-    if(judged) return;
     draggingRef.current=true;
     startXRef.current=e.clientX;
     try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(err){}
   };
   const onPointerMove=(e)=>{
-    if(!draggingRef.current||judged) return;
+    if(!draggingRef.current) return;
     setDragX(e.clientX-startXRef.current);
   };
   const endDrag=()=>{
@@ -4799,8 +4832,8 @@ function SwipeGame({registerActivity,state}){
   const pct=(timeLeft/SWIPE_DURATION)*100;
   const low=timeLeft<=10;
   const rot=Math.max(-18,Math.min(18,dragX/10));
-  const cardBg = (judged==="right"||dragX>40)?C.greenSoft : (judged==="left"||dragX<-40)?C.coralSoft : C.card;
-  const cardBorder = (judged==="right"||dragX>40)?C.green : (judged==="left"||dragX<-40)?C.coral : C.line;
+  const cardBg = dragX>40?C.greenSoft : dragX<-40?C.coralSoft : C.card;
+  const cardBorder = dragX>40?C.green : dragX<-40?C.coral : C.line;
   return(
     <div className="fadein">
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -4813,6 +4846,7 @@ function SwipeGame({registerActivity,state}){
       </div>
 
       <div style={{position:"relative",height:190,marginBottom:18,touchAction:"none"}}>
+        {/* Tarjeta actual: siempre lista e interactiva de inmediato, sin esperar animaciones. */}
         {round&&(
           <div
             onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag}
@@ -4820,24 +4854,25 @@ function SwipeGame({registerActivity,state}){
               position:"absolute",inset:0,background:cardBg,border:`2px solid ${cardBorder}`,borderRadius:20,
               display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20,
               cursor:"grab",userSelect:"none",touchAction:"none",
-              transform:`translateX(${judged==="right"?400:judged==="left"?-400:dragX}px) rotate(${judged==="right"?20:judged==="left"?-20:rot}deg)`,
-              opacity:judged?0:1,
-              transition:draggingRef.current?"none":"transform .25s ease, opacity .2s ease"
+              transform:`translateX(${dragX}px) rotate(${rot}deg)`,
+              transition:draggingRef.current?"none":"transform .2s ease"
             }}>
             <p style={{fontSize:12,color:C.inkSoft,textTransform:"uppercase",letterSpacing:1,margin:"0 0 10px"}}>¿Es correcta esta traducción?</p>
             <p style={{fontSize:24,fontWeight:800,color:C.ink,margin:"0 0 6px",fontFamily:FEN,textAlign:"center"}}>{round.en}</p>
             <p style={{fontSize:16,color:C.inkSoft,margin:0}}>=</p>
             <p style={{fontSize:22,fontWeight:700,color:C.ink,margin:"6px 0 0",fontFamily:FEN,textAlign:"center"}}>{round.es}</p>
-            {dragX>40&&!judged&&<span style={{position:"absolute",top:14,right:14,fontSize:28}}>✅</span>}
-            {dragX<-40&&!judged&&<span style={{position:"absolute",top:14,left:14,fontSize:28}}>❌</span>}
+            {dragX>40&&<span style={{position:"absolute",top:14,right:14,fontSize:28}}>✅</span>}
+            {dragX<-40&&<span style={{position:"absolute",top:14,left:14,fontSize:28}}>❌</span>}
           </div>
         )}
+        {/* Tarjeta recién juzgada: capa aparte por encima, volando fuera de pantalla — nunca deja un hueco vacío. */}
+        {exitCard&&<SwipeExitCard {...exitCard}/>}
       </div>
 
       <div style={{display:"flex",gap:14,justifyContent:"center"}}>
-        <button onClick={()=>judge(false)} disabled={!!judged}
+        <button onClick={()=>judge(false)}
           style={{width:64,height:64,borderRadius:"50%",border:`2px solid ${C.coral}`,background:C.card,fontSize:26,color:C.coral}}>❌</button>
-        <button onClick={()=>judge(true)} disabled={!!judged}
+        <button onClick={()=>judge(true)}
           style={{width:64,height:64,borderRadius:"50%",border:`2px solid ${C.green}`,background:C.card,fontSize:26,color:C.green}}>✅</button>
       </div>
       <p style={{textAlign:"center",fontSize:12,color:C.inkSoft,margin:"10px 0 0"}}>Desliza la tarjeta o toca un botón</p>
