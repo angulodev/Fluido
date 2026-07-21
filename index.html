@@ -484,27 +484,37 @@ function AudioWarning(){
 // ============================================================
 const APP_TABS=["home","practice","talk","phrases","grammar","listen","write","levelcheck","settings"];
 const tabFromHash=()=>{try{const h=(location.hash||"").replace(/^#\/?/,"");const seg=h.split("/")[0];return APP_TABS.includes(seg)?seg:"home";}catch(e){return "home";}};
-// Segundo segmento del hash (ej. #/phrases/vocab -> "vocab") — usado por los hubs internos
-// (Vocabulario, Práctica) para que el botón atrás de Android también sepa "desandar" un nivel
-// en vez de saltar directo a Inicio.
-const subFromHash=()=>{try{const h=(location.hash||"").replace(/^#\/?/,"");const parts=h.split("/");return parts[1]||null;}catch(e){return null;}};
-// Hook reutilizable para hubs internos con menú de tarjetas (Vocabulario, Práctica): sincroniza
-// el "sub-estado" (qué sección está abierta) con el segundo segmento del hash, para que el botón
-// atrás nativo de Android desande un nivel (sección -> menú) en vez de saltar directo a Inicio.
-function useSubRoute(tabId){
-  const [sub,setSubRaw]=useState(()=>subFromHash());
+// Segundo segmento del hash — usado por los hubs internos (Vocabulario, Práctica) para que el
+// botón atrás de Android también sepa "desandar" un nivel en vez de saltar directo a Inicio.
+// Hook reutilizable para hubs internos con menú de tarjetas (Vocabulario, Práctica, y el hub de
+// Juegos anidado dentro de Vocabulario): sincroniza el "sub-estado" (qué sección está abierta)
+// con el segmento del hash inmediatamente después de `prefix`, para que el botón atrás nativo de
+// Android desande un nivel a la vez en vez de saltar directo a Inicio. `prefix` puede ser un solo
+// tab ("practice") o una ruta anidada ("phrases/speed") para hubs dentro de hubs.
+function useSubRoute(prefix){
+  const prefixParts=prefix.split("/");
+  const readSub=()=>{
+    try{
+      const h=(location.hash||"").replace(/^#\/?/,"");
+      const parts=h.split("/");
+      for(let i=0;i<prefixParts.length;i++){ if(parts[i]!==prefixParts[i]) return undefined; }
+      return parts[prefixParts.length]||null;
+    }catch(e){ return null; }
+  };
+  const [sub,setSubRaw]=useState(readSub);
   useEffect(()=>{
     const onHash=()=>{
-      const h=(location.hash||"").replace(/^#\/?/,"");
-      if(h.split("/")[0]!==tabId) return; // cambiamos de tab, no nos compete
-      setSubRaw(subFromHash());
+      const v=readSub();
+      if(v===undefined) return; // el hash está en otra rama; este hub no está activo, no tocar su estado
+      setSubRaw(v);
     };
     window.addEventListener("hashchange",onHash);
     return()=>window.removeEventListener("hashchange",onHash);
-  },[tabId]);
+    // eslint-disable-next-line
+  },[prefix]);
   const select=(id)=>{
     setSubRaw(id);
-    try{ location.hash="/"+tabId+(id?"/"+id:""); }catch(e){}
+    try{ location.hash="/"+prefix+(id?"/"+id:""); }catch(e){}
   };
   return [sub,select];
 }
@@ -2050,12 +2060,11 @@ function Phrases({state,save,registerActivity,initialMode}){
         const isBasic=state.level==="A0"||state.level==="A2";
         const SECTIONS=[
           {id:"cards",emoji:"📚",title:"Frases",desc:"Tarjetas de frases útiles con repaso espaciado.",soft:C.blueSoft},
-          {id:"speed",emoji:"🎮",title:"Juegos",desc:"Practica vocabulario jugando (contrarreloj, audio…).",soft:C.greenSoft},
-          {id:"grammar",emoji:"📝",title:"Quiz",desc:"Preguntas de gramática y uso, a tu nivel.",soft:C.blueSoft},
+          {id:"speed",emoji:"🎮",title:"Juegos",desc:"Practica vocabulario y gramática jugando (contrarreloj, audio, quiz…).",soft:C.greenSoft},
           {id:"verbs",emoji:"🏃",title:"Verbos",desc:"Conjugaciones y verbos irregulares esenciales.",soft:C.greenSoft},
           {id:"vocab",emoji:"🗂️",title:"Vocab",desc:`Más de 2.900 palabras en ${BANK_WORDS.length} bloques temáticos.`,soft:C.blueSoft},
         ];
-        const ordered=isBasic?[SECTIONS[4],SECTIONS[1],SECTIONS[3],SECTIONS[2],SECTIONS[0]]:SECTIONS;
+        const ordered=isBasic?[SECTIONS[3],SECTIONS[1],SECTIONS[2],SECTIONS[0]]:SECTIONS;
         return(
           <div>
             <p style={{fontSize:14,color:C.inkSoft,margin:"0 0 16px"}}>Elige una forma de practicar tu vocabulario.</p>
@@ -4448,31 +4457,34 @@ function makeSpeedRound(allWords,cfg,blockOf){
 // 🎮 JUEGOS — hub con selector entre los distintos juegos
 // ============================================================
 function Games({registerActivity,state}){
-  const [game,setGame]=useState(null); // null = menú · "speed" · "audio"
+  const [game,setGame]=useSubRoute("phrases/speed"); // null = menú · "speed" · "audio" · "grammar"
   const GAMES=[
     {id:"speed",emoji:"⏱️",title:"Contrarreloj",desc:"Traduce a máxima velocidad contra el reloj.",
       accent:C.blue,soft:C.blueSoft,record:()=>Math.max(loadSpeedBest("easy"),loadSpeedBest("medium"),loadSpeedBest("hard")),recordLabel:"récord"},
     {id:"audio",emoji:"🎧",title:"Escucha y elige",desc:"Oye la palabra en inglés y elige su significado.",
       accent:C.green,soft:C.greenSoft,record:()=>loadAudioBest(),recordLabel:`de ${AUDIO_ROUNDS}`},
+    {id:"grammar",emoji:"📝",title:"Quiz",desc:"Preguntas de gramática y uso, a tu nivel.",
+      accent:C.blue,soft:C.blueSoft,record:null,recordLabel:null},
   ];
   const back=<button onClick={()=>setGame(null)} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,padding:"0 0 10px"}}>← Juegos</button>;
-  if(game==="speed") return <div>{back}<SpeedGame registerActivity={registerActivity} state={state}/></div>;
-  if(game==="audio") return <div>{back}<AudioGame registerActivity={registerActivity} state={state}/></div>;
+  if(game==="speed")   return <div>{back}<SpeedGame registerActivity={registerActivity} state={state}/></div>;
+  if(game==="audio")   return <div>{back}<AudioGame registerActivity={registerActivity} state={state}/></div>;
+  if(game==="grammar") return <div>{back}<Grammar state={state} registerActivity={registerActivity}/></div>;
   return(
     <div className="fadein">
-      <p style={{fontSize:14,color:C.inkSoft,margin:"0 0 16px"}}>Elige un juego para practicar vocabulario de forma interactiva.</p>
+      <p style={{fontSize:14,color:C.inkSoft,margin:"0 0 16px"}}>Elige un juego para practicar vocabulario y gramática de forma interactiva.</p>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         {GAMES.map(g=>{
-          const rec=g.record();
+          const rec=g.record?g.record():null;
           return(
             <button key={g.id} onClick={()=>setGame(g.id)}
               style={{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:8,padding:"18px 16px",borderRadius:18,border:`1.5px solid ${C.line}`,background:C.card,textAlign:"left",minHeight:172,position:"relative",overflow:"hidden"}}>
               <span style={{width:52,height:52,borderRadius:14,background:g.soft,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>{g.emoji}</span>
               <span style={{display:"block",fontWeight:800,fontSize:16,color:C.ink,lineHeight:1.2}}>{g.title}</span>
               <span style={{display:"block",fontSize:12,color:C.inkSoft,lineHeight:1.35,flex:1}}>{g.desc}</span>
-              <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:g.accent,background:g.soft,borderRadius:999,padding:"4px 10px"}}>
+              {rec!==null&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:g.accent,background:g.soft,borderRadius:999,padding:"4px 10px"}}>
                 🏆 {rec} {g.recordLabel}
-              </span>
+              </span>}
             </button>
           );
         })}
