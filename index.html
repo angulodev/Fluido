@@ -483,7 +483,31 @@ function AudioWarning(){
 // APP RAÍZ
 // ============================================================
 const APP_TABS=["home","practice","talk","phrases","grammar","listen","write","levelcheck","settings"];
-const tabFromHash=()=>{try{const h=(location.hash||"").replace(/^#\/?/,"");return APP_TABS.includes(h)?h:"home";}catch(e){return "home";}};
+const tabFromHash=()=>{try{const h=(location.hash||"").replace(/^#\/?/,"");const seg=h.split("/")[0];return APP_TABS.includes(seg)?seg:"home";}catch(e){return "home";}};
+// Segundo segmento del hash (ej. #/phrases/vocab -> "vocab") — usado por los hubs internos
+// (Vocabulario, Práctica) para que el botón atrás de Android también sepa "desandar" un nivel
+// en vez de saltar directo a Inicio.
+const subFromHash=()=>{try{const h=(location.hash||"").replace(/^#\/?/,"");const parts=h.split("/");return parts[1]||null;}catch(e){return null;}};
+// Hook reutilizable para hubs internos con menú de tarjetas (Vocabulario, Práctica): sincroniza
+// el "sub-estado" (qué sección está abierta) con el segundo segmento del hash, para que el botón
+// atrás nativo de Android desande un nivel (sección -> menú) en vez de saltar directo a Inicio.
+function useSubRoute(tabId){
+  const [sub,setSubRaw]=useState(()=>subFromHash());
+  useEffect(()=>{
+    const onHash=()=>{
+      const h=(location.hash||"").replace(/^#\/?/,"");
+      if(h.split("/")[0]!==tabId) return; // cambiamos de tab, no nos compete
+      setSubRaw(subFromHash());
+    };
+    window.addEventListener("hashchange",onHash);
+    return()=>window.removeEventListener("hashchange",onHash);
+  },[tabId]);
+  const select=(id)=>{
+    setSubRaw(id);
+    try{ location.hash="/"+tabId+(id?"/"+id:""); }catch(e){}
+  };
+  return [sub,select];
+}
 function App(){
   const [state,setState]=useState(loadState);
   const [tab,setTabRaw]=useState(tabFromHash);
@@ -1762,7 +1786,7 @@ function talkSave(d){try{sessionStorage.setItem("fluido-talk",JSON.stringify(d))
 // ✍️ PRÁCTICA — hub que agrupa Conversar + Escribir (producción)
 // ============================================================
 function Practice({state,registerActivity}){
-  const [sub,setSub]=useState(null); // null = menú · "talk" · "write"
+  const [sub,setSub]=useSubRoute("practice"); // null = menú · "talk" · "write"
   const back=<button onClick={()=>setSub(null)} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,padding:"0 0 10px"}}>← Práctica</button>;
   if(sub==="talk")  return <div>{back}<Talk state={state} registerActivity={registerActivity}/></div>;
   if(sub==="write") return <div>{back}<Write state={state} registerActivity={registerActivity}/></div>;
@@ -1977,7 +2001,9 @@ function Feedback({fb,collapsed}){
 // FRASES
 // ============================================================
 function Phrases({state,save,registerActivity,initialMode}){
-  const [mode,setMode]=useState(initialMode||null);
+  const [hashMode,selectMode]=useSubRoute("phrases");
+  const mode=initialMode||hashMode;
+  const setMode=selectMode; // solo aplica al flujo normal por el hub (initialMode es null en ese caso)
   const [flipped,setFlipped]=useState(false);
   const [generating,setGenerating]=useState(false);
   const [error,setError]=useState(null);
@@ -2048,7 +2074,7 @@ function Phrases({state,save,registerActivity,initialMode}){
       })()}
 
       {/* Botón volver cuando hay una sección activa */}
-      {mode&&<button onClick={()=>setMode(null)} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,padding:"0 0 12px"}}>← Vocabulario</button>}
+      {mode&&!initialMode&&<button onClick={()=>setMode(null)} style={{border:"none",background:"transparent",color:C.blue,fontWeight:600,fontSize:14,padding:"0 0 12px"}}>← Vocabulario</button>}
 
       {mode==="grammar" && <Grammar state={state} registerActivity={registerActivity}/>}
       {mode==="verbs"   && <Verbs registerActivity={registerActivity} state={state}/>}
